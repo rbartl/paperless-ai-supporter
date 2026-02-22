@@ -1,0 +1,9 @@
+.env
+*~
+reports
+.claude
+temp_jira_list.txt
+node_modules
+dist
+config.yaml
+prompts

@@ -1,0 +1,131 @@
+export interface Config {
+  paperless: PaperlessConfig;
+  customFields: CustomFieldsConfig;
+  llm: LlmConfig;
+}
+
+export interface PaperlessConfig {
+  tag: string;
+  removeTagAfterProcessing: boolean;
+  setArchiveSerialNumber: boolean;
+  updateTitle: boolean;
+  titleFormat: string;
+  reportPath: string | null;
+  invoiceDocumentType: number | null;
+  statementDocumentType: number | null;
+}
+
+export interface CustomFieldsConfig {
+  invoiceNumber: string | null;
+  bookingDate: string | null;
+  invoiceDate: string | null;
+  invoiceTotal: string | null;
+  vendor: string | null;
+  taxAccount: string | null;
+  ustSatz: string | null;
+  nettoBetrag: string | null;
+  ustBetrag: string | null;
+  llmConfidence: string | null;
+  originalTitle: string | null;
+  aisummary: string | null;
+}
+
+export interface ResolvedCustomFields {
+  invoiceNumber: number | null;
+  bookingDate: number | null;
+  invoiceDate: number | null;
+  invoiceTotal: number | null;
+  vendor: number | null;
+  taxAccount: number | null;
+  ustSatz: number | null;
+  nettoBetrag: number | null;
+  ustBetrag: number | null;
+  llmConfidence: number | null;
+  originalTitle: number | null;
+  aisummary: number | null;
+}
+
+export interface LlmEndpointConfig {
+  url: string;
+  key: string;
+  model: string;
+  timeout: number;
+}
+
+export interface LlmConfig {
+  text: LlmEndpointConfig;
+  vision: LlmEndpointConfig;
+  maxContentLength: number;
+  visionFallback: {
+    enabled: boolean;
+    fields: string[];
+  };
+}
+
+export interface EnvConfig {
+  paperlessUrl: string;
+  paperlessApiToken: string;
+  cfAccessClientId?: string;
+  cfAccessClientSecret?: string;
+}
+
+export interface PaperlessDocument {
+  id: number;
+  title: string;
+  content: string;
+  tags: number[];
+  custom_fields: CustomFieldValue[];
+  created: string;
+  added: string;
+  correspondent: number | null;
+  archive_serial_number: number | null;
+}
+
+export interface CustomFieldValue {
+  field: number;
+  value: string | number | null;
+}
+
+export interface PaperlessCustomField {
+  id: number;
+  name: string;
+  data_type: string;
+}
+
+export interface PaperlessTag {
+  id: number;
+  name: string;
+}
+
+export interface PaperlessListResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+export interface ExtractedInvoiceData {
+  isInvoice: boolean;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  invoiceTotal: number | null;
+  currency: string | null;
+  vendor: string | null;
+  taxAccount: string | null;
+  invoiceCategory: 'private' | 'gewerbe' | null;
+  ustSatz: number | null;
+  nettoBetrag: number | null;
+  ustBetrag: number | null;
+  llmConfidence: number | null;
+  summary: string | null;
+}
+
+export interface ProcessingResult {
+  documentId: number;
+  title: string;
+  newTitle?: string;
+  success: boolean;
+  extractedData?: ExtractedInvoiceData;
+  error?: string;
+  skipped?: boolean;
+}
