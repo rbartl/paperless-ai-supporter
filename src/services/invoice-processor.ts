@@ -10,6 +10,8 @@ import {
   ResolvedCustomFields,
 } from '../types/index.js';
 
+const LOW_CONFIDENCE_NON_INVOICE_THRESHOLD = 50;
+
 export class InvoiceProcessor {
   constructor(
     private paperless: PaperlessClient,
@@ -50,7 +52,7 @@ export class InvoiceProcessor {
       }
 
       let extractedData = await this.llm.extractInvoiceData(content, document.title);
-      console.log(`  → vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | conf:${extractedData.llmConfidence ?? '?'}%`);
+      console.log(`  → vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'} | conf:${extractedData.llmConfidence ?? '?'}%`);
 
       // Vision fallback if enabled and fields are missing
       if (extractedData.isInvoice && this.llm.needsVisionFallback(extractedData)) {
@@ -58,9 +60,32 @@ export class InvoiceProcessor {
         try {
           const preview = await this.paperless.getDocumentPreview(documentId);
           extractedData = await this.llm.extractWithVision(preview, extractedData);
-          console.log(`  → vision: vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'}`);
+          console.log(`  → vision: vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
         } catch (error) {
           console.log(`  Vision error: ${error instanceof Error ? error.message : error}`);
+        }
+      }
+
+      // Low-confidence non-invoice: give vision a chance to recover obvious invoices
+      if (
+        !extractedData.isInvoice &&
+        extractedData.llmConfidence !== null &&
+        extractedData.llmConfidence < LOW_CONFIDENCE_NON_INVOICE_THRESHOLD
+      ) {
+        console.log(`  Low confidence non-invoice (conf=${extractedData.llmConfidence}%), trying vision fallback...`);
+        try {
+          const preview = await this.paperless.getDocumentPreview(documentId);
+          const visionSeed: ExtractedInvoiceData = { ...extractedData, isInvoice: true };
+          extractedData = await this.llm.extractWithVision(preview, visionSeed);
+          console.log(`  → vision(low-conf): vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
+
+          // If vision filled at least vendor and total, treat as invoice
+          if (!extractedData.isInvoice && extractedData.vendor && extractedData.invoiceTotal != null) {
+            extractedData.isInvoice = true;
+            console.log('  → treating as invoice based on vision result (vendor + total present)');
+          }
+        } catch (error) {
+          console.log(`  Vision (low-conf) error: ${error instanceof Error ? error.message : error}`);
         }
       }
 

@@ -37,6 +37,7 @@ export class LlmClient {
   private maxContentLength: number;
   private systemPrompt: string;
   private extractionPrompt: string;
+  private visionPrompt: string;
   private customRules: string | null;
 
   constructor(config: LlmConfig) {
@@ -67,6 +68,7 @@ export class LlmClient {
 
     this.systemPrompt = this.loadPromptFile('system.txt');
     this.extractionPrompt = this.loadPromptFile('extraction.txt');
+    this.visionPrompt = this.loadPromptFile('vision.txt', true);
     this.customRules = this.loadPromptFile('custom-rules.txt', true);
   }
 
@@ -221,7 +223,18 @@ export class LlmClient {
     const base64Image = image.buffer.toString('base64');
     const mimeType = image.mimeType;
 
-    const prompt = `Look at this invoice image and extract the following missing fields:
+    const customRulesSection = this.customRules
+      ? `\nUser rules for category (apply when they fit):\n${this.customRules}`
+      : '';
+    const jsonExample = `{\n  ${missingFields.map((f) => `"${f}": "..."`).join(',\n  ')},\n  "invoiceCategory": "private" or "gewerbe"\n}`;
+
+    const prompt = this.visionPrompt
+      ? this.visionPrompt
+          .replace('{{MISSING_FIELDS_LIST}}', missingFields.map((f) => `- ${f}`).join('\n'))
+          .replace('{{CURRENT_DATA_JSON}}', JSON.stringify(currentData, null, 2))
+          .replace('{{CUSTOM_RULES_SECTION}}', customRulesSection)
+          .replace('{{JSON_EXAMPLE}}', jsonExample)
+      : `Look at this invoice image and extract the following missing fields:
 ${missingFields.map((f) => `- ${f}`).join('\n')}
 
 Current extracted data (from OCR):
@@ -232,10 +245,11 @@ IMPORTANT format rules:
 - invoiceTotal, nettoBetrag, ustBetrag must be numbers with dot as decimal separator (e.g., 412.18)
 - ustSatz must be a string (e.g., "20")
 
-Return ONLY valid JSON with the missing fields filled in where visible:
-{
-  ${missingFields.map((f) => `"${f}": "..."`).join(',\n  ')}
-}
+Always set invoiceCategory to either "private" (personal/consumer purchase) or "gewerbe" (business expense). Use the vendor and the items on the invoice to decide (e.g. office supplies → gewerbe, personal care/hygiene → private). If vendor or product type suggests one category more than the other, prefer that; if truly ambiguous, choose based on what seems more likely.
+${customRulesSection}
+
+Return ONLY valid JSON with the missing fields filled in where visible, and always include invoiceCategory:
+${jsonExample}
 
 Use null if a field is not visible in the image.`;
 
@@ -266,6 +280,13 @@ Use null if a field is not visible in the image.`;
         const content = response.data.choices[0]?.message?.content;
         if (!content) {
           throw new Error('No response content from vision model');
+        }
+
+        try {
+          const compacted = JSON.stringify(JSON.parse(content.match(/\{[\s\S]*\}/)?.[0] || content));
+          console.log(`    Vision raw: ${compacted}`);
+        } catch {
+          console.log(`    Vision raw: ${content.replace(/\n\s*/g, ' ')}`);
         }
 
         const visionData = this.parseVisionResponse(content);
@@ -345,6 +366,12 @@ Use null if a field is not visible in the image.`;
           result[key] = `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
           continue;
         }
+      }
+
+      // Only accept valid invoiceCategory
+      if (key === 'invoiceCategory') {
+        result[key] = value === 'private' || value === 'gewerbe' ? value : null;
+        continue;
       }
 
       result[key] = value;
