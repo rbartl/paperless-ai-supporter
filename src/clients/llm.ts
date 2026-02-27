@@ -171,7 +171,12 @@ export class LlmClient {
           throw new Error('No response content from LLM');
         }
 
-        console.log(`    LLM raw response:\n${content}`);
+        try {
+          const compacted = JSON.stringify(JSON.parse(content.match(/\{[\s\S]*\}/)?.[0] || content));
+          console.log(`    LLM raw: ${compacted}`);
+        } catch {
+          console.log(`    LLM raw: ${content.replace(/\n\s*/g, ' ')}`);
+        }
         return this.parseResponse(content);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
@@ -184,12 +189,20 @@ export class LlmClient {
     throw lastError;
   }
 
+  /** Treat null, undefined, empty/whitespace string (and NaN for numbers) as missing for vision fallback. */
+  private isFieldValueEmpty(value: unknown): boolean {
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'string') return value.trim().length === 0;
+    if (typeof value === 'number') return Number.isNaN(value);
+    return false;
+  }
+
   needsVisionFallback(data: ExtractedInvoiceData): boolean {
     if (!this.visionFallback.enabled || !data.isInvoice) return false;
 
     for (const field of this.visionFallback.fields) {
       const value = data[field as keyof ExtractedInvoiceData];
-      if (value === null || value === undefined) {
+      if (this.isFieldValueEmpty(value)) {
         return true;
       }
     }
@@ -201,8 +214,8 @@ export class LlmClient {
     currentData: ExtractedInvoiceData,
     retries = 2
   ): Promise<ExtractedInvoiceData> {
-    const missingFields = this.visionFallback.fields.filter(
-      (f) => currentData[f as keyof ExtractedInvoiceData] === null
+    const missingFields = this.visionFallback.fields.filter((f) =>
+      this.isFieldValueEmpty(currentData[f as keyof ExtractedInvoiceData])
     );
 
     const base64Image = image.buffer.toString('base64');
