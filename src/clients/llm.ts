@@ -199,6 +199,25 @@ export class LlmClient {
     return false;
   }
 
+  /** Seed for vision-only extraction (e.g. document with no OCR text). */
+  getEmptyExtractionSeed(): ExtractedInvoiceData {
+    return {
+      isInvoice: true,
+      invoiceNumber: null,
+      invoiceDate: null,
+      invoiceTotal: null,
+      currency: null,
+      vendor: null,
+      taxAccount: null,
+      invoiceCategory: null,
+      ustSatz: null,
+      nettoBetrag: null,
+      ustBetrag: null,
+      llmConfidence: null,
+      summary: null,
+    };
+  }
+
   needsVisionFallback(data: ExtractedInvoiceData): boolean {
     if (!this.visionFallback.enabled || !data.isInvoice) return false;
 

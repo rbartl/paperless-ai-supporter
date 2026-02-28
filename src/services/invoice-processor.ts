@@ -42,17 +42,37 @@ export class InvoiceProcessor {
       console.log(`\nProcessing document ${documentId}: "${document.title}"`);
 
       const content = document.content;
-      if (!content || content.trim().length === 0) {
-        return {
-          documentId,
-          title: document.title,
-          success: false,
-          error: 'Document has no text content',
-        };
-      }
+      const hasNoText = !content || content.trim().length === 0;
 
-      let extractedData = await this.llm.extractInvoiceData(content, document.title);
-      console.log(`  → vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'} | conf:${extractedData.llmConfidence ?? '?'}%`);
+      let extractedData: ExtractedInvoiceData;
+
+      if (hasNoText) {
+        if (!this.llm.needsVisionFallback(this.llm.getEmptyExtractionSeed())) {
+          return {
+            documentId,
+            title: document.title,
+            success: false,
+            error: 'Document has no text content',
+          };
+        }
+        console.log(`  No text content, using vision fallback...`);
+        try {
+          const preview = await this.paperless.getDocumentPreview(documentId);
+          extractedData = await this.llm.extractWithVision(preview, this.llm.getEmptyExtractionSeed());
+          console.log(`  → vision(no-text): vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
+        } catch (error) {
+          console.log(`  Vision (no-text) error: ${error instanceof Error ? error.message : error}`);
+          return {
+            documentId,
+            title: document.title,
+            success: false,
+            error: `Document has no text content; vision fallback failed: ${error instanceof Error ? error.message : error}`,
+          };
+        }
+      } else {
+        extractedData = await this.llm.extractInvoiceData(content, document.title);
+        console.log(`  → vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'} | conf:${extractedData.llmConfidence ?? '?'}%`);
+      }
 
       // Vision fallback if enabled and fields are missing
       if (extractedData.isInvoice && this.llm.needsVisionFallback(extractedData)) {
