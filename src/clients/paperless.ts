@@ -174,6 +174,7 @@ export class PaperlessClient {
       invoiceDate: resolve(config.invoiceDate),
       invoiceTotal: resolve(config.invoiceTotal),
       vendor: resolve(config.vendor),
+      customer: resolve(config.customer),
       taxAccount: resolve(config.taxAccount),
       ustSatz: resolve(config.ustSatz),
       nettoBetrag: resolve(config.nettoBetrag),

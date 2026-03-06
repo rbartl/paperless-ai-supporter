@@ -254,6 +254,9 @@ export class InvoiceProcessor {
     if (cf.vendor !== null && extractedData.vendor !== null) {
       fieldMap.set(cf.vendor, extractedData.vendor);
     }
+    if (cf.customer !== null && extractedData.customer !== null) {
+      fieldMap.set(cf.customer, extractedData.customer);
+    }
     if (cf.taxAccount !== null && extractedData.taxAccount !== null) {
       fieldMap.set(cf.taxAccount, extractedData.taxAccount);
     }
@@ -314,8 +317,15 @@ export class InvoiceProcessor {
 
   private formatTitle(data: ExtractedInvoiceData): string | null {
     const format = this.config.paperless.titleFormat;
+    const selfAsCustomer = this.config.paperless.selfAsCustomer ?? [];
 
-    const vendor = (data.vendor || 'unknown')
+    // When we are the vendor (outgoing invoice), show customer in place of vendor in the title
+    const isSelfAsVendor =
+      data.vendor != null &&
+      data.vendor.trim() !== '' &&
+      selfAsCustomer.some((self) => data.vendor!.trim().toLowerCase() === self.trim().toLowerCase());
+    const vendorSource = isSelfAsVendor ? (data.customer || 'unknown') : (data.vendor || 'unknown');
+    const vendor = vendorSource
       .toLowerCase()
       .replace(/[^a-z0-9äöüß]/g, '')
       .substring(0, 20);
@@ -325,14 +335,33 @@ export class InvoiceProcessor {
     const invoiceDate = data.invoiceDate ? data.invoiceDate.replace(/-/g, '') : '';
     const taxAccount = data.taxAccount || '';
 
+    const isSelfAsCustomer =
+      data.customer != null &&
+      data.customer.trim() !== '' &&
+      selfAsCustomer.some(
+        (self) => data.customer!.trim().toLowerCase() === self.trim().toLowerCase()
+      );
+    const customer =
+      isSelfAsCustomer && data.customer
+        ? data.customer
+            .toLowerCase()
+            .replace(/[^a-z0-9äöüß]/g, '')
+            .substring(0, 20)
+        : '';
+
     let title = format
       .replace('{{vendor}}', vendor)
       .replace('{{invoiceNumber}}', invoiceNumber)
       .replace('{{invoiceDate}}', invoiceDate)
-      .replace('{{taxAccount}}', taxAccount);
+      .replace('{{taxAccount}}', taxAccount)
+      .replace('{{customer}}', customer);
 
-    // Clean up empty placeholders and trailing underscores/dashes
-    title = title.replace(/_+$/, '').replace(/-+$/, '');
+    // Clean up empty placeholders: collapse repeated separators, then trim trailing
+    title = title
+      .replace(/_+/g, '_')
+      .replace(/-+/g, '-')
+      .replace(/_+$/, '')
+      .replace(/-+$/, '');
 
     return title;
   }

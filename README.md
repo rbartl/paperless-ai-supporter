@@ -50,10 +50,10 @@ npm run dev list-tags
 
 ## Features
 
-- Extracts: invoice number, date, total, vendor, VAT rate, net/VAT amounts
+- Extracts: invoice number, date, total, vendor, customer (Rechnungsempfänger; optional), VAT rate, net/VAT amounts
 - Categorizes invoices (private/business) and assigns tax accounts
 - Auto-assigns archive serial number
-- Formats document title as `YYYYMMDD vendor-invoicenumber_taxAccount`
+- Formats document title via `titleFormat` (placeholders: `{{vendor}}`, `{{invoiceNumber}}`, `{{invoiceDate}}`, `{{taxAccount}}`, `{{customer}}`). When you are the vendor (your name in `selfAsCustomer`), `{{vendor}}` shows the customer (recipient) instead of your name. When you are the customer, `{{customer}}` is filled; otherwise it is omitted.
 - Adds tags based on category (private or gewerbe/ausgabe/rechnung)
 - Vision fallback for documents with poor OCR
 - Processing log in `reports/processing.log`
@@ -71,6 +71,10 @@ npm run dev list-tags
 - **Custom rules** (`prompts/custom-rules.txt`) are the most reliable way to handle specific vendors or product types that the model consistently misclassifies. These are appended to the prompt and act as explicit overrides.
 - **OCR hint** at the top of the extraction prompt reminds the model that text may be garbled and to interpret partial matches.
 - **Few-shot example** in the extraction prompt shows the model the expected JSON format - small models benefit significantly from this.
+
+## Docs
+
+- [Hard override rules (plan)](docs/hard-overrides-plan.md) – Natural-language rules translated to executable logic (before/after LLM).
 
 ## Requirements
 
