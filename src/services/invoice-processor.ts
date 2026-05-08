@@ -10,6 +10,8 @@ import {
   ResolvedCustomFields,
 } from '../types/index.js';
 
+const LOW_CONFIDENCE_NON_INVOICE_THRESHOLD = 50;
+
 export class InvoiceProcessor {
   constructor(
     private paperless: PaperlessClient,
@@ -40,44 +42,89 @@ export class InvoiceProcessor {
       console.log(`\nProcessing document ${documentId}: "${document.title}"`);
 
       const content = document.content;
-      if (!content || content.trim().length === 0) {
-        return {
-          documentId,
-          title: document.title,
-          success: false,
-          error: 'Document has no text content',
-        };
-      }
+      const hasNoText = !content || content.trim().length === 0;
 
-      console.log(`  Extracting data using LLM...`);
-      let extractedData = await this.llm.extractInvoiceData(content, document.title);
-      console.log(`  Extracted:`, extractedData);
+      let extractedData: ExtractedInvoiceData;
+
+      if (hasNoText) {
+        if (!this.llm.needsVisionFallback(this.llm.getEmptyExtractionSeed())) {
+          return {
+            documentId,
+            title: document.title,
+            success: false,
+            error: 'Document has no text content',
+          };
+        }
+        console.log(`  No text content, using vision fallback...`);
+        try {
+          const preview = await this.paperless.getDocumentPreview(documentId);
+          extractedData = await this.llm.extractWithVision(preview, this.llm.getEmptyExtractionSeed());
+          console.log(`  → vision(no-text): vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
+        } catch (error) {
+          console.log(`  Vision (no-text) error: ${error instanceof Error ? error.message : error}`);
+          return {
+            documentId,
+            title: document.title,
+            success: false,
+            error: `Document has no text content; vision fallback failed: ${error instanceof Error ? error.message : error}`,
+          };
+        }
+      } else {
+        extractedData = await this.llm.extractInvoiceData(content, document.title);
+        console.log(`  → vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'} | conf:${extractedData.llmConfidence ?? '?'}%`);
+      }
 
       // Vision fallback if enabled and fields are missing
       if (extractedData.isInvoice && this.llm.needsVisionFallback(extractedData)) {
-        console.log(`  Trying vision fallback for missing fields...`);
+        console.log(`  Vision fallback...`);
         try {
           const preview = await this.paperless.getDocumentPreview(documentId);
           extractedData = await this.llm.extractWithVision(preview, extractedData);
-          console.log(`  After vision:`, extractedData);
+          console.log(`  → vision: vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
         } catch (error) {
-          console.log(`  Vision fallback error: ${error instanceof Error ? error.message : error}`);
+          console.log(`  Vision error: ${error instanceof Error ? error.message : error}`);
+        }
+      }
+
+      // Low-confidence non-invoice: give vision a chance to recover obvious invoices
+      if (
+        !extractedData.isInvoice &&
+        extractedData.llmConfidence !== null &&
+        extractedData.llmConfidence < LOW_CONFIDENCE_NON_INVOICE_THRESHOLD
+      ) {
+        console.log(`  Low confidence non-invoice (conf=${extractedData.llmConfidence}%), trying vision fallback...`);
+        try {
+          const preview = await this.paperless.getDocumentPreview(documentId);
+          const visionSeed: ExtractedInvoiceData = { ...extractedData, isInvoice: true };
+          extractedData = await this.llm.extractWithVision(preview, visionSeed);
+          console.log(`  → vision(low-conf): vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
+
+          // If vision filled at least vendor and total, treat as invoice
+          if (!extractedData.isInvoice && extractedData.vendor && extractedData.invoiceTotal != null) {
+            extractedData.isInvoice = true;
+            console.log('  → treating as invoice based on vision result (vendor + total present)');
+          }
+        } catch (error) {
+          console.log(`  Vision (low-conf) error: ${error instanceof Error ? error.message : error}`);
         }
       }
 
       if (!extractedData.isInvoice) {
-        console.log(`  Skipped: Not an invoice`);
         if (!dryRun) {
+          const skipActions: string[] = ['skip:not-invoice'];
           // Set summary even for non-invoice documents
           if (this.customFields.aisummary !== null && extractedData.summary) {
             const summaryFields = this.buildSummaryPayload(extractedData.summary, document.custom_fields);
             await this.paperless.updateDocumentCustomFields(documentId, summaryFields);
-            console.log(`  Set AI summary: "${extractedData.summary}"`);
+            skipActions.push(`summary="${extractedData.summary}"`);
           }
           if (this.config.paperless.removeTagAfterProcessing) {
             await this.paperless.removeTagFromDocument(documentId, this.config.paperless.tag);
-            console.log(`  Removed tag "${this.config.paperless.tag}"`);
+            skipActions.push(`-tag:${this.config.paperless.tag}`);
           }
+          console.log(`  ${skipActions.join(', ')}`);
+        } else {
+          console.log(`  skip:not-invoice`);
         }
         return {
           documentId,
@@ -95,27 +142,24 @@ export class InvoiceProcessor {
       const categoryTags = this.getCategoryTags(extractedData.invoiceCategory);
 
       if (dryRun) {
-        console.log(`  [DRY RUN] Would update custom fields`);
-        if (newTitle) {
-          console.log(`  [DRY RUN] Would set title to: "${newTitle}"`);
-        }
-        if (categoryTags.length > 0) {
-          console.log(`  [DRY RUN] Would add tags: ${categoryTags.join(', ')}`);
-        }
+        const dryActions: string[] = ['fields'];
+        if (newTitle) dryActions.push(`title="${newTitle}"`);
+        if (categoryTags.length > 0) dryActions.push(`tags=[${categoryTags.join(',')}]`);
         if (this.config.paperless.setIssueDate && extractedData.invoiceDate) {
-          console.log(`  [DRY RUN] Would set issue date to: ${extractedData.invoiceDate}`);
+          dryActions.push(`issueDate=${extractedData.invoiceDate}`);
         }
         if (this.config.paperless.setArchiveSerialNumber && document.archive_serial_number === null) {
           const nextAsn = await this.paperless.getNextArchiveSerialNumber();
-          console.log(`  [DRY RUN] Would set archive serial number to: ${nextAsn}`);
+          dryActions.push(`ASN=${nextAsn}`);
         }
         const isStatement = extractedData.taxAccount === 'KK';
         const documentTypeId = isStatement
           ? this.config.paperless.statementDocumentType
           : this.config.paperless.invoiceDocumentType;
         if (documentTypeId !== null) {
-          console.log(`  [DRY RUN] Would set document type to: ${isStatement ? 'Kontoauszug' : 'Rechnung'} (${documentTypeId})`);
+          dryActions.push(`type=${isStatement ? 'Kontoauszug' : 'Rechnung'}`);
         }
+        console.log(`  [DRY RUN] Would: ${dryActions.join(', ')}`);
         return {
           documentId,
           title: document.title,
@@ -126,27 +170,28 @@ export class InvoiceProcessor {
 
       const customFields = this.buildCustomFieldsPayload(extractedData, document.custom_fields, document.title);
       await this.paperless.updateDocumentCustomFields(documentId, customFields);
-      console.log(`  Updated custom fields`);
+
+      const actions: string[] = ['fields'];
 
       if (newTitle) {
         await this.paperless.updateDocumentTitle(documentId, newTitle);
-        console.log(`  Updated title to: "${newTitle}"`);
+        actions.push(`title="${newTitle}"`);
       }
 
       if (categoryTags.length > 0) {
         await this.paperless.addTagsToDocument(documentId, categoryTags);
-        console.log(`  Added tags: ${categoryTags.join(', ')}`);
+        actions.push(`tags=[${categoryTags.join(',')}]`);
       }
 
       if (this.config.paperless.setIssueDate && extractedData.invoiceDate) {
         await this.paperless.updateDocumentCreatedDate(documentId, extractedData.invoiceDate);
-        console.log(`  Set issue date to: ${extractedData.invoiceDate}`);
+        actions.push(`issueDate=${extractedData.invoiceDate}`);
       }
 
       if (this.config.paperless.setArchiveSerialNumber && document.archive_serial_number === null) {
         const nextAsn = await this.paperless.getNextArchiveSerialNumber();
         await this.paperless.setArchiveSerialNumber(documentId, nextAsn);
-        console.log(`  Set archive serial number to: ${nextAsn}`);
+        actions.push(`ASN=${nextAsn}`);
       }
 
       // Set document type based on taxAccount
@@ -156,13 +201,15 @@ export class InvoiceProcessor {
         : this.config.paperless.invoiceDocumentType;
       if (documentTypeId !== null) {
         await this.paperless.setDocumentType(documentId, documentTypeId);
-        console.log(`  Set document type to: ${isStatement ? 'Kontoauszug' : 'Rechnung'}`);
+        actions.push(`type=${isStatement ? 'Kontoauszug' : 'Rechnung'}`);
       }
 
       if (this.config.paperless.removeTagAfterProcessing) {
         await this.paperless.removeTagFromDocument(documentId, this.config.paperless.tag);
-        console.log(`  Removed tag "${this.config.paperless.tag}"`);
+        actions.push(`-tag:${this.config.paperless.tag}`);
       }
+
+      console.log(`  Updated: ${actions.join(', ')}`);
 
       return {
         documentId,
@@ -214,6 +261,9 @@ export class InvoiceProcessor {
     }
     if (cf.vendor !== null && extractedData.vendor !== null) {
       fieldMap.set(cf.vendor, extractedData.vendor);
+    }
+    if (cf.customer !== null && extractedData.customer !== null) {
+      fieldMap.set(cf.customer, extractedData.customer);
     }
     if (cf.taxAccount !== null && extractedData.taxAccount !== null) {
       fieldMap.set(cf.taxAccount, extractedData.taxAccount);
@@ -275,8 +325,15 @@ export class InvoiceProcessor {
 
   private formatTitle(data: ExtractedInvoiceData): string | null {
     const format = this.config.paperless.titleFormat;
+    const selfAsCustomer = this.config.paperless.selfAsCustomer ?? [];
 
-    const vendor = (data.vendor || 'unknown')
+    // When we are the vendor (outgoing invoice), show customer in place of vendor in the title
+    const isSelfAsVendor =
+      data.vendor != null &&
+      data.vendor.trim() !== '' &&
+      selfAsCustomer.some((self) => data.vendor!.trim().toLowerCase() === self.trim().toLowerCase());
+    const vendorSource = isSelfAsVendor ? (data.customer || 'unknown') : (data.vendor || 'unknown');
+    const vendor = vendorSource
       .toLowerCase()
       .replace(/[^a-z0-9äöüß]/g, '')
       .substring(0, 20);
@@ -286,37 +343,47 @@ export class InvoiceProcessor {
     const invoiceDate = data.invoiceDate ? data.invoiceDate.replace(/-/g, '') : '';
     const taxAccount = data.taxAccount || '';
 
+    const isSelfAsCustomer =
+      data.customer != null &&
+      data.customer.trim() !== '' &&
+      selfAsCustomer.some(
+        (self) => data.customer!.trim().toLowerCase() === self.trim().toLowerCase()
+      );
+    const customer =
+      isSelfAsCustomer && data.customer
+        ? data.customer
+            .toLowerCase()
+            .replace(/[^a-z0-9äöüß]/g, '')
+            .substring(0, 20)
+        : '';
+
     let title = format
       .replace('{{vendor}}', vendor)
       .replace('{{invoiceNumber}}', invoiceNumber)
       .replace('{{invoiceDate}}', invoiceDate)
-      .replace('{{taxAccount}}', taxAccount);
+      .replace('{{taxAccount}}', taxAccount)
+      .replace('{{customer}}', customer);
 
-    // Clean up empty placeholders and trailing underscores/dashes
-    title = title.replace(/_+$/, '').replace(/-+$/, '');
+    // Clean up empty placeholders: collapse repeated separators, then trim trailing
+    title = title
+      .replace(/_+/g, '_')
+      .replace(/-+/g, '-')
+      .replace(/_+$/, '')
+      .replace(/-+$/, '');
 
     return title;
   }
 
   printSummary(results: ProcessingResult[], dryRun = false): void {
-    console.log('\n' + '='.repeat(50));
-    console.log('Processing Summary');
-    console.log('='.repeat(50));
-
     const successful = results.filter((r) => r.success && !r.skipped);
     const skipped = results.filter((r) => r.skipped);
     const failed = results.filter((r) => !r.success);
 
-    console.log(`Total: ${results.length}`);
-    console.log(`Processed: ${successful.length}`);
-    console.log(`Skipped (not invoices): ${skipped.length}`);
-    console.log(`Failed: ${failed.length}`);
+    console.log(`\n--- ${results.length} total: ${successful.length} processed, ${skipped.length} skipped, ${failed.length} failed ---`);
 
     if (failed.length > 0) {
-      console.log('\nFailed documents:');
       for (const result of failed) {
-        console.log(`  - ${result.documentId}: ${result.title}`);
-        console.log(`    Error: ${result.error}`);
+        console.log(`  FAIL #${result.documentId} "${result.title}": ${result.error}`);
       }
     }
 

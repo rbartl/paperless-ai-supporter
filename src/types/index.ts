@@ -31,6 +31,8 @@ export interface PaperlessConfig {
   setIssueDate: boolean;
   updateTitle: boolean;
   titleFormat: string;
+  /** Your names (case-insensitive). When extracted customer matches → {{customer}} in titleFormat is filled. When you are the vendor → {{vendor}} in titleFormat shows the customer (recipient) instead of your name. E.g. ["edvbartl", "EDV Bartl"]. */
+  selfAsCustomer?: string[];
   reportPath: string | null;
   invoiceDocumentType: number | null;
   statementDocumentType: number | null;
@@ -42,6 +44,7 @@ export interface CustomFieldsConfig {
   invoiceDate: string | null;
   invoiceTotal: string | null;
   vendor: string | null;
+  customer: string | null;
   taxAccount: string | null;
   ustSatz: string | null;
   nettoBetrag: string | null;
@@ -57,6 +60,7 @@ export interface ResolvedCustomFields {
   invoiceDate: number | null;
   invoiceTotal: number | null;
   vendor: number | null;
+  customer: number | null;
   taxAccount: number | null;
   ustSatz: number | null;
   nettoBetrag: number | null;
@@ -132,6 +136,8 @@ export interface ExtractedInvoiceData {
   invoiceTotal: number | null;
   currency: string | null;
   vendor: string | null;
+  /** Recipient/customer name (Rechnungsempfänger). Optional; null if not on document. */
+  customer: string | null;
   taxAccount: string | null;
   invoiceCategory: 'private' | 'gewerbe' | null;
   ustSatz: number | null;
