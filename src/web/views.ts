@@ -1,6 +1,6 @@
 import { DbProcessingResult, ExtractedInvoiceData, PaperlessDocument } from '../types/index.js';
 
-function layout(title: string, body: string, activeNav: 'results' | 'queue'): string {
+function layout(title: string, body: string, activeNav: 'results' | 'queue' | 'prompts'): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -70,6 +70,7 @@ function layout(title: string, body: string, activeNav: 'results' | 'queue'): st
     <div class="navbar-nav ms-3">
       <a class="nav-link ${activeNav === 'results' ? 'active' : ''}" href="/">Results</a>
       <a class="nav-link ${activeNav === 'queue' ? 'active' : ''}" href="/queue">Queue</a>
+      <a class="nav-link ${activeNav === 'prompts' ? 'active' : ''}" href="/prompts">Prompts</a>
     </div>
   </div>
 </nav>
@@ -510,7 +511,57 @@ export function errorPage(message: string): string {
   return layout('Error', body, 'results');
 }
 
-function escHtml(s: string): string {
+export function promptsPage(prompts: Record<string, string>): string {
+  const tabs = [
+    { id: 'system',       label: 'System',       key: 'system' },
+    { id: 'extraction',   label: 'Extraction',   key: 'extraction' },
+    { id: 'vision',       label: 'Vision',       key: 'vision' },
+    { id: 'custom-rules', label: 'Custom Rules', key: 'custom-rules' },
+  ];
+
+  const navItems = tabs.map((t, i) =>
+    `<li class="nav-item">
+      <button class="nav-link${i === 0 ? ' active' : ''}" data-bs-toggle="tab"
+              data-bs-target="#tab-${t.id}" type="button">${t.label}</button>
+    </li>`
+  ).join('\n');
+
+  const panes = tabs.map((t, i) =>
+    `<div class="tab-pane fade${i === 0 ? ' show active' : ''}" id="tab-${t.id}">
+      <form hx-post="/api/prompts/${t.key}" hx-target="#save-result-${t.id}" hx-swap="innerHTML"
+            hx-encoding="application/x-www-form-urlencoded">
+        <div class="card">
+          <div class="card-body p-2">
+            <textarea name="content" class="form-control mono" rows="22"
+                      style="font-size:0.8rem;resize:vertical">${escHtml(prompts[t.key] ?? '')}</textarea>
+          </div>
+        </div>
+        <div class="mt-2 d-flex gap-2 align-items-center">
+          <button type="submit" class="btn btn-accent">Save</button>
+          <span id="save-result-${t.id}" style="font-size:0.85rem"></span>
+        </div>
+      </form>
+    </div>`
+  ).join('\n');
+
+  const body = `
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="mb-0">Prompt Editor</h5>
+    <div class="text-muted" style="font-size:0.83rem">Edit LLM prompt templates — changes take effect immediately</div>
+  </div>
+</div>
+<ul class="nav nav-tabs mb-3">
+  ${navItems}
+</ul>
+<div class="tab-content">
+  ${panes}
+</div>`;
+
+  return layout('Prompts', body, 'prompts');
+}
+
+export function escHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

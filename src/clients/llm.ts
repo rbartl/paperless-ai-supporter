@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { ExtractedInvoiceData, LlmConfig } from '../types/index.js';
@@ -8,6 +8,63 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROMPTS_DIR = join(__dirname, '../../prompts');
 
 const DEFAULT_MAX_CONTENT_LENGTH = 3500;
+
+const DEFAULT_PROMPTS: Record<string, string> = {
+  'system.txt': `You are an invoice data extraction assistant for Austrian/German accounting.
+Extract structured data from invoice documents and return it as JSON.
+Always respond with valid JSON only, no extra text.`,
+
+  'extraction.txt': `Extract invoice data from the following document and return JSON.
+
+Document title: {{DOCUMENT_TITLE}}
+
+Document content:
+{{DOCUMENT_CONTENT}}
+
+Return a JSON object with exactly these fields:
+{
+  "isInvoice": true or false,
+  "invoiceNumber": "string or null",
+  "invoiceDate": "YYYY-MM-DD or null",
+  "invoiceTotal": number or null,
+  "currency": "EUR or other ISO code",
+  "vendor": "company or person name or null",
+  "customer": "recipient name or null",
+  "taxAccount": "accounting code or null (e.g. 3200, 5200, KK)",
+  "invoiceCategory": "private" or "gewerbe" or null,
+  "ustSatz": number or null,
+  "nettoBetrag": number or null,
+  "ustBetrag": number or null,
+  "llmConfidence": 0-100 integer,
+  "summary": "one sentence summary or null"
+}
+
+Rules:
+- invoiceDate must be YYYY-MM-DD format
+- All amounts use dot as decimal separator (e.g. 42.50)
+- invoiceCategory "gewerbe" = business expense, "private" = personal purchase
+- If isInvoice is false, set all other fields to null
+- Return ONLY the JSON object, no markdown, no extra text`,
+
+  'vision.txt': `Look at this invoice image and extract the following missing fields:
+{{MISSING_FIELDS_LIST}}
+
+Current extracted data (from OCR):
+{{CURRENT_DATA_JSON}}
+
+IMPORTANT format rules:
+- invoiceDate must be in YYYY-MM-DD format (e.g., "2025-09-03")
+- invoiceTotal, nettoBetrag, ustBetrag must be numbers with dot as decimal separator (e.g., 412.18)
+- ustSatz must be a string (e.g., "20")
+
+Always set invoiceCategory to either "private" (personal/consumer purchase) or "gewerbe" (business expense).
+{{CUSTOM_RULES_SECTION}}
+
+Return ONLY valid JSON with the missing fields filled in where visible, and always include invoiceCategory:
+{{JSON_EXAMPLE}}
+
+Use null if a field is not visible in the image.`,
+};
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -72,15 +129,44 @@ export class LlmClient {
     this.customRules = this.loadPromptFile('custom-rules.txt', true);
   }
 
+  readonly promptsDir = PROMPTS_DIR;
+
   private loadPromptFile(filename: string, optional = false): string {
     const filePath = join(PROMPTS_DIR, filename);
     if (!existsSync(filePath)) {
-      if (optional) {
-        return '';
+      if (optional) return '';
+      const def = DEFAULT_PROMPTS[filename];
+      if (def !== undefined) {
+        console.warn(`Prompt file not found: ${filePath} — using built-in default`);
+        return def;
       }
       throw new Error(`Prompt file not found: ${filePath}`);
     }
     return readFileSync(filePath, 'utf-8').trim();
+  }
+
+  getPrompts(): Record<string, string> {
+    return {
+      system: this.systemPrompt,
+      extraction: this.extractionPrompt,
+      vision: this.visionPrompt,
+      'custom-rules': this.customRules ?? '',
+    };
+  }
+
+  savePrompt(name: string, content: string): void {
+    const allowed = ['system', 'extraction', 'vision', 'custom-rules'];
+    if (!allowed.includes(name)) throw new Error(`Unknown prompt: ${name}`);
+    mkdirSync(PROMPTS_DIR, { recursive: true });
+    writeFileSync(join(PROMPTS_DIR, `${name}.txt`), content, 'utf-8');
+    this.reloadPrompts();
+  }
+
+  reloadPrompts(): void {
+    this.systemPrompt = this.loadPromptFile('system.txt');
+    this.extractionPrompt = this.loadPromptFile('extraction.txt');
+    this.visionPrompt = this.loadPromptFile('vision.txt', true);
+    this.customRules = this.loadPromptFile('custom-rules.txt', true);
   }
 
   private truncateContent(content: string): string {

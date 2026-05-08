@@ -226,6 +226,25 @@ export async function startWebServer(
     }
   });
 
+  // ── Prompt editor ───────────────────────────────────────────────────────────
+
+  app.get('/prompts', (_req, res) => {
+    res.send(views.promptsPage(llm.getPrompts()));
+  });
+
+  app.post('/api/prompts/:name', (req, res) => {
+    const name = req.params.name;
+    const content: string = req.body.content ?? '';
+    try {
+      llm.savePrompt(name, content);
+      res.send('<span class="text-success">✓ Saved</span>');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[prompts] save error (${name}): ${msg}`);
+      res.status(400).send(`<span class="text-danger">${views.escHtml(msg)}</span>`);
+    }
+  });
+
   app.listen(port, () => {
     console.log(`Web server running at http://localhost:${port}`);
   });
