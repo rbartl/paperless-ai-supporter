@@ -157,6 +157,11 @@ export class PaperlessClient {
     const response = await this.client.get<PaperlessListResponse<PaperlessCustomField>>(
       '/api/custom_fields/'
     );
+    if (!Array.isArray(response.data?.results)) {
+      throw new Error(
+        `Unexpected response from GET /api/custom_fields/ — expected {results:[...]}, got: ${JSON.stringify(response.data)?.slice(0, 200)}`
+      );
+    }
     return response.data.results;
   }
 

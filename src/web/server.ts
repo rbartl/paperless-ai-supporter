@@ -61,7 +61,14 @@ export async function startWebServer(
   const paperless = new PaperlessClient(envConfig);
   const llm = new LlmClient(config.llm);
   console.log('Resolving custom fields...');
-  const resolvedFields = await paperless.resolveCustomFields(config.customFields);
+  let resolvedFields;
+  try {
+    resolvedFields = await paperless.resolveCustomFields(config.customFields);
+  } catch (err) {
+    console.error('Failed to resolve custom fields:');
+    console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
+    process.exit(1);
+  }
   const processor = new InvoiceProcessor(paperless, llm, config, resolvedFields);
   const repo = new ResultRepository(dbPath);
   const broadcaster = new LogBroadcaster();

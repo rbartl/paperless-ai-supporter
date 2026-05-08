@@ -45,7 +45,7 @@ program
 
       processor.printSummary(results, false);
     } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
+      console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
       process.exit(1);
     }
   });
@@ -83,7 +83,7 @@ program
 
       processor.printSummary(results, true);
     } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
+      console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
       process.exit(1);
     }
   });
@@ -122,7 +122,7 @@ program
       console.log('  invoiceTotal: <ID>');
       console.log('  vendor: <ID>');
     } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
+      console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
       process.exit(1);
     }
   });
@@ -149,7 +149,7 @@ program
         console.log(`  ${tag.id}: ${tag.name}`);
       }
     } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
+      console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
       process.exit(1);
     }
   });
@@ -172,7 +172,7 @@ program
       const { startWebServer } = await import('./web/server.js');
       await startWebServer(config, envConfig);
     } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
+      console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
       process.exit(1);
     }
   });
