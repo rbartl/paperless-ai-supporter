@@ -21,9 +21,9 @@ function layout(title: string, body: string, activeNav: 'results' | 'queue' | 'p
     body { font-family: 'DM Sans', sans-serif; background: var(--surface); }
     .navbar { background: var(--nav-bg) !important; }
     .navbar-brand { color: #fff !important; font-weight: 600; font-size: 1.1rem; }
-    .nav-link { color: rgba(255,255,255,0.7) !important; font-size: 0.9rem; }
-    .nav-link:hover, .nav-link.active { color: #fff !important; }
-    .nav-link.active { border-bottom: 2px solid var(--accent); }
+    .navbar .nav-link { color: rgba(255,255,255,0.7) !important; font-size: 0.9rem; }
+    .navbar .nav-link:hover, .navbar .nav-link.active { color: #fff !important; }
+    .navbar .nav-link.active { border-bottom: 2px solid var(--accent); }
     .card { border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
     .stat-value { font-size: 2rem; font-weight: 600; line-height: 1; }
     .stat-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; margin-top: 4px; }
