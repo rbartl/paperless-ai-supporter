@@ -102,6 +102,9 @@ export class InvoiceProcessor {
         if (categoryTags.length > 0) {
           console.log(`  [DRY RUN] Would add tags: ${categoryTags.join(', ')}`);
         }
+        if (this.config.paperless.setIssueDate && extractedData.invoiceDate) {
+          console.log(`  [DRY RUN] Would set issue date to: ${extractedData.invoiceDate}`);
+        }
         if (this.config.paperless.setArchiveSerialNumber && document.archive_serial_number === null) {
           const nextAsn = await this.paperless.getNextArchiveSerialNumber();
           console.log(`  [DRY RUN] Would set archive serial number to: ${nextAsn}`);
@@ -133,6 +136,11 @@ export class InvoiceProcessor {
       if (categoryTags.length > 0) {
         await this.paperless.addTagsToDocument(documentId, categoryTags);
         console.log(`  Added tags: ${categoryTags.join(', ')}`);
+      }
+
+      if (this.config.paperless.setIssueDate && extractedData.invoiceDate) {
+        await this.paperless.updateDocumentCreatedDate(documentId, extractedData.invoiceDate);
+        console.log(`  Set issue date to: ${extractedData.invoiceDate}`);
       }
 
       if (this.config.paperless.setArchiveSerialNumber && document.archive_serial_number === null) {

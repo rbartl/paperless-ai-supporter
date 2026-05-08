@@ -76,6 +76,12 @@ export class PaperlessClient {
     });
   }
 
+  async updateDocumentCreatedDate(id: number, date: string): Promise<void> {
+    await this.client.patch(`/api/documents/${id}/`, {
+      created: date,
+    });
+  }
+
   async updateDocumentTitle(id: number, title: string): Promise<void> {
     await this.client.patch(`/api/documents/${id}/`, {
       title,

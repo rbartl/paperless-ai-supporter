@@ -1,13 +1,34 @@
+export interface WebConfig {
+  dbPath: string;
+  port?: number;
+}
+
 export interface Config {
   paperless: PaperlessConfig;
   customFields: CustomFieldsConfig;
   llm: LlmConfig;
+  web?: WebConfig;
+}
+
+export interface DbProcessingResult {
+  id: number;
+  document_id: number;
+  document_title: string;
+  new_title: string | null;
+  processed_at: string;
+  success: number;
+  skipped: number;
+  dry_run: number;
+  error_message: string | null;
+  extracted_json: string | null;
+  llm_model: string | null;
 }
 
 export interface PaperlessConfig {
   tag: string;
   removeTagAfterProcessing: boolean;
   setArchiveSerialNumber: boolean;
+  setIssueDate: boolean;
   updateTitle: boolean;
   titleFormat: string;
   reportPath: string | null;

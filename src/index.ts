@@ -5,6 +5,7 @@ import { loadConfig, loadEnvConfig } from './config.js';
 import { PaperlessClient } from './clients/paperless.js';
 import { LlmClient } from './clients/llm.js';
 import { InvoiceProcessor } from './services/invoice-processor.js';
+import { ResultRepository } from './db/repository.js';
 
 const program = new Command();
 
@@ -27,14 +28,19 @@ program
       const llm = new LlmClient(config.llm);
       const resolvedFields = await paperless.resolveCustomFields(config.customFields);
       const processor = new InvoiceProcessor(paperless, llm, config, resolvedFields);
+      const repo = config.web?.dbPath ? new ResultRepository(config.web.dbPath) : null;
 
       let results;
       if (options.id) {
         const result = await processor.processDocument(parseInt(options.id, 10), false);
+        repo?.save(result, false, config.llm.text.model);
         results = [result];
       } else {
         const limit = options.limit ? parseInt(options.limit, 10) : undefined;
         results = await processor.processAllTaggedDocuments(false, limit);
+        if (repo) {
+          for (const r of results) repo.save(r, false, config.llm.text.model);
+        }
       }
 
       processor.printSummary(results, false);
@@ -58,16 +64,21 @@ program
       const llm = new LlmClient(config.llm);
       const resolvedFields = await paperless.resolveCustomFields(config.customFields);
       const processor = new InvoiceProcessor(paperless, llm, config, resolvedFields);
+      const repo = config.web?.dbPath ? new ResultRepository(config.web.dbPath) : null;
 
       console.log('[DRY RUN MODE] No changes will be made\n');
 
       let results;
       if (options.id) {
         const result = await processor.processDocument(parseInt(options.id, 10), true);
+        repo?.save(result, true, config.llm.text.model);
         results = [result];
       } else {
         const limit = options.limit ? parseInt(options.limit, 10) : undefined;
         results = await processor.processAllTaggedDocuments(true, limit);
+        if (repo) {
+          for (const r of results) repo.save(r, true, config.llm.text.model);
+        }
       }
 
       processor.printSummary(results, true);
@@ -137,6 +148,29 @@ program
       for (const tag of tags) {
         console.log(`  ${tag.id}: ${tag.name}`);
       }
+    } catch (error) {
+      console.error('Error:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('web')
+  .description('Start the web UI server')
+  .action(async () => {
+    try {
+      const config = loadConfig();
+      const envConfig = loadEnvConfig();
+
+      if (!config.web?.dbPath) {
+        console.error(
+          'Error: web.dbPath must be configured in config.yaml to use the web server.'
+        );
+        process.exit(1);
+      }
+
+      const { startWebServer } = await import('./web/server.js');
+      await startWebServer(config, envConfig);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : error);
       process.exit(1);
