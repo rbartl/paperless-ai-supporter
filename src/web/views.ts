@@ -477,9 +477,37 @@ export function queuePage(
       </table>
     </div>
   </div>
+</div>
+<div class="card mt-3">
+  <div class="card-header bg-transparent" style="font-size:0.85rem;font-weight:600;border-bottom:1px solid var(--border)">
+    Process by Document ID
+  </div>
+  <div class="card-body">
+    <div class="text-muted mb-2" style="font-size:0.83rem">Process any document from Paperless regardless of queue tag.</div>
+    <form hx-post="/queue/process-id" hx-target="#process-id-result" hx-swap="innerHTML"
+          class="d-flex gap-2 align-items-center">
+      <input type="number" name="docId" placeholder="Document ID" min="1"
+             class="form-control form-control-sm mono" style="width:140px">
+      <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
+    </form>
+    <div id="process-id-result" class="mt-2"></div>
+  </div>
 </div>`;
 
   return layout('Queue', body, 'queue');
+}
+
+export function processIdResult(row: DbProcessingResult, paperlessUrl: string): string {
+  const data: ExtractedInvoiceData | null = row.extracted_json ? JSON.parse(row.extracted_json) : null;
+  const title = row.new_title || row.document_title;
+  const vendor = data?.vendor ? ` · ${escHtml(data.vendor)}` : '';
+  return `<div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:0.85rem">
+    ${statusBadge(row)}
+    <a href="${paperlessUrl}/documents/${row.document_id}/details" target="_blank"
+       class="mono text-decoration-none">#${row.document_id}</a>
+    <span>${escHtml(title)}${vendor}</span>
+    <a href="/results/${row.id}" class="btn btn-outline-secondary btn-outline-sm ms-1">Detail</a>
+  </div>`;
 }
 
 export function queueProcessedRow(

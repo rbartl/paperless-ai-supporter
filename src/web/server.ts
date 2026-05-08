@@ -196,6 +196,29 @@ export async function startWebServer(
     }
   });
 
+  // ── Process any document by ID (not necessarily in queue) ───────────────────
+
+  app.post('/queue/process-id', async (req, res) => {
+    const docId = parseInt(req.body.docId as string, 10);
+    if (isNaN(docId) || docId < 1) {
+      res.status(400).send('<span class="text-danger">Invalid document ID.</span>');
+      return;
+    }
+    try {
+      console.log(`[process-id] document #${docId}`);
+      const result = await broadcaster.capture(() =>
+        processor.processDocument(docId, false)
+      );
+      const saved = repo.save(result, false, config.llm.text.model);
+      console.log(`[process-id] done → result #${saved.id}, success=${!!result.success}, skipped=${!!result.skipped}`);
+      res.send(views.processIdResult(saved, paperlessUrl));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[process-id] error for #${docId}: ${msg}`);
+      res.status(500).send(`<span class="text-danger"><code>${views.escHtml(msg)}</code></span>`);
+    }
+  });
+
   // ── Batch process N documents from the queue ─────────────────────────────────
 
   app.post('/queue/process-batch', async (req, res) => {
