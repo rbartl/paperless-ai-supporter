@@ -439,6 +439,21 @@ export function queuePage(
   paperlessUrl: string
 ): string {
   const body = `
+<div class="card mb-3">
+  <div class="card-header bg-transparent" style="font-size:0.85rem;font-weight:600;border-bottom:1px solid var(--border)">
+    Process by Document ID
+  </div>
+  <div class="card-body">
+    <div class="text-muted mb-2" style="font-size:0.83rem">Process any document from Paperless regardless of queue tag.</div>
+    <form hx-post="/queue/process-id" hx-target="#process-id-result" hx-swap="innerHTML"
+          class="d-flex gap-2 align-items-center">
+      <input type="number" name="docId" placeholder="Document ID" min="1"
+             class="form-control form-control-sm mono" style="width:140px">
+      <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
+    </form>
+    <div id="process-id-result" class="mt-2"></div>
+  </div>
+</div>
 <div class="d-flex align-items-center justify-content-between mb-3">
   <div>
     <h5 class="mb-0">Queue <span class="text-muted fw-normal" style="font-size:0.9rem">(${docs.length})</span></h5>
@@ -476,21 +491,6 @@ export function queuePage(
         </tbody>
       </table>
     </div>
-  </div>
-</div>
-<div class="card mt-3">
-  <div class="card-header bg-transparent" style="font-size:0.85rem;font-weight:600;border-bottom:1px solid var(--border)">
-    Process by Document ID
-  </div>
-  <div class="card-body">
-    <div class="text-muted mb-2" style="font-size:0.83rem">Process any document from Paperless regardless of queue tag.</div>
-    <form hx-post="/queue/process-id" hx-target="#process-id-result" hx-swap="innerHTML"
-          class="d-flex gap-2 align-items-center">
-      <input type="number" name="docId" placeholder="Document ID" min="1"
-             class="form-control form-control-sm mono" style="width:140px">
-      <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
-    </form>
-    <div id="process-id-result" class="mt-2"></div>
   </div>
 </div>`;
 
