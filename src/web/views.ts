@@ -157,7 +157,7 @@ function formatDate(iso: string): string {
 const sub = (text: string) =>
   `<div class="text-muted" style="font-size:0.75rem;margin-top:2px">${text}</div>`;
 
-export function resultRow(row: DbProcessingResult, paperlessUrl: string): string {
+export function resultRow(row: DbProcessingResult, paperlessUrl: string, newerResultId?: number): string {
   const data: ExtractedInvoiceData | null = row.extracted_json
     ? JSON.parse(row.extracted_json)
     : null;
@@ -182,7 +182,10 @@ export function resultRow(row: DbProcessingResult, paperlessUrl: string): string
     ? `Net ${fmt(data?.nettoBetrag)} + VAT ${fmt(data?.ustBetrag)}${data?.ustSatz != null ? ` (${data.ustSatz}%)` : ''}`
     : '';
 
-  return `<tr id="result-row-${row.id}">
+  const superseded = newerResultId !== undefined;
+  const rowStyle = superseded ? ' style="opacity:0.45"' : '';
+
+  return `<tr id="result-row-${row.id}"${rowStyle}>
   <td><span class="mono">${invoiceDate}</span></td>
   <td>
     <a href="${paperlessUrl}/documents/${row.document_id}/details" target="_blank" class="mono text-decoration-none">#${row.document_id}</a>
@@ -201,17 +204,20 @@ export function resultRow(row: DbProcessingResult, paperlessUrl: string): string
   </td>
   <td><span class="badge bg-secondary bg-opacity-10 text-dark">${escHtml(taxAcc)}</span></td>
   <td>${confidenceHtml(data?.llmConfidence ?? null)}</td>
-  <td>${statusBadge(row)}</td>
+  <td>
+    ${statusBadge(row)}
+    ${superseded ? sub(`<a href="/results/${newerResultId}" style="color:var(--accent)">→ newer #${newerResultId}</a>`) : ''}
+  </td>
   <td>
     <div class="d-flex gap-1">
       <a href="/results/${row.id}" class="btn btn-outline-secondary btn-outline-sm">Detail</a>
-      <button
+      ${!superseded ? `<button
         class="btn btn-accent"
         hx-post="/results/${row.id}/retry"
         hx-target="#result-row-${row.id}"
         hx-swap="outerHTML"
         hx-confirm="Reprocess document #${row.document_id}?"
-      >${spinIcon}Retry</button>
+      >${spinIcon}Retry</button>` : ''}
     </div>
   </td>
 </tr>`;
@@ -257,8 +263,17 @@ export function resultsPage(
   stats: { total: number; success: number; failed: number; skipped: number },
   paperlessUrl: string
 ): string {
+  // First occurrence per document_id (rows are newest-first) = the current result.
+  const newestByDoc = new Map<number, number>();
+  for (const r of rows) {
+    if (!newestByDoc.has(r.document_id)) newestByDoc.set(r.document_id, r.id);
+  }
+
   const tableRows = rows.length
-    ? rows.map((r) => resultRow(r, paperlessUrl)).join('\n')
+    ? rows.map((r) => {
+        const newestId = newestByDoc.get(r.document_id)!;
+        return resultRow(r, paperlessUrl, newestId !== r.id ? newestId : undefined);
+      }).join('\n')
     : `<tr><td colspan="9" class="text-center text-muted py-4">No results yet.</td></tr>`;
 
   const body = `
