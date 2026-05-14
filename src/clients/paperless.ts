@@ -190,6 +190,7 @@ export class PaperlessClient {
       ustSatz: resolve(config.ustSatz),
       nettoBetrag: resolve(config.nettoBetrag),
       ustBetrag: resolve(config.ustBetrag),
+      privatanteil: resolve(config.privatanteil),
       llmConfidence: resolve(config.llmConfidence),
       originalTitle: resolve(config.originalTitle),
       aisummary: resolve(config.aisummary),

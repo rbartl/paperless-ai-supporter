@@ -179,7 +179,7 @@ export function resultRow(row: DbProcessingResult, paperlessUrl: string, newerRe
     : '';
 
   const ustLine = (data?.nettoBetrag != null || data?.ustBetrag != null)
-    ? `Net ${fmt(data?.nettoBetrag)} + VAT ${fmt(data?.ustBetrag)}${data?.ustSatz != null ? ` (${data.ustSatz}%)` : ''}`
+    ? `Net ${fmt(data?.nettoBetrag)} + VAT ${fmt(data?.ustBetrag)}${data?.ustSatz != null ? ` (${data.ustSatz}%)` : ''}${data?.privatanteil != null ? ` · Privat ${data.privatanteil}%` : ''}`
     : '';
 
   const superseded = newerResultId !== undefined;
@@ -383,6 +383,7 @@ export function detailPage(row: DbProcessingResult, paperlessUrl: string): strin
             ${fieldItem('Net Amount', data.nettoBetrag !== null ? `${data.currency ?? 'EUR'} ${Number(data.nettoBetrag).toFixed(2)}` : null, true)}
             ${fieldItem('VAT Amount', data.ustBetrag !== null ? `${data.currency ?? 'EUR'} ${Number(data.ustBetrag).toFixed(2)}` : null, true)}
             ${fieldItem('VAT Rate', data.ustSatz !== null ? `${data.ustSatz}%` : null, true)}
+            ${fieldItem('Private Share', data.privatanteil !== null ? `${data.privatanteil}%` : null, true)}
             ${fieldItem('Tax Account', data.taxAccount)}
             ${fieldItem('Category', data.invoiceCategory)}
             ${fieldItem('Currency', data.currency, true)}

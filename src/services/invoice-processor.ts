@@ -281,6 +281,9 @@ export class InvoiceProcessor {
       const monetaryValue = `${currency}${Number(extractedData.ustBetrag).toFixed(2)}`;
       fieldMap.set(cf.ustBetrag, monetaryValue);
     }
+    if (cf.privatanteil !== null && extractedData.privatanteil !== null) {
+      fieldMap.set(cf.privatanteil, String(extractedData.privatanteil));
+    }
     if (cf.llmConfidence !== null && extractedData.llmConfidence !== null) {
       fieldMap.set(cf.llmConfidence, String(extractedData.llmConfidence));
     }
@@ -412,7 +415,7 @@ export class InvoiceProcessor {
         lines.push(`timestamp=${timestamp},status=FAILED,type=invoice,docId=${r.documentId},title="${r.title}",error="${r.error}"`);
       } else {
         const d = r.extractedData!;
-        lines.push(`timestamp=${timestamp},status=OK,type=invoice,docId=${r.documentId},llmConfidence=${d.llmConfidence || ''},oldTitle="${r.title}",newTitle="${r.newTitle || ''}",category=${d.invoiceCategory || ''},vendor="${d.vendor || ''}",invoiceNumber="${d.invoiceNumber || ''}",date=${d.invoiceDate || ''},total=${d.invoiceTotal || ''},netto=${d.nettoBetrag || ''},ust=${d.ustBetrag || ''},ustSatz=${d.ustSatz || ''},currency=${d.currency || 'EUR'},taxAccount=${d.taxAccount || ''}`);
+        lines.push(`timestamp=${timestamp},status=OK,type=invoice,docId=${r.documentId},llmConfidence=${d.llmConfidence || ''},oldTitle="${r.title}",newTitle="${r.newTitle || ''}",category=${d.invoiceCategory || ''},vendor="${d.vendor || ''}",invoiceNumber="${d.invoiceNumber || ''}",date=${d.invoiceDate || ''},total=${d.invoiceTotal || ''},netto=${d.nettoBetrag || ''},ust=${d.ustBetrag || ''},ustSatz=${d.ustSatz || ''},privatanteil=${d.privatanteil ?? ''},currency=${d.currency || 'EUR'},taxAccount=${d.taxAccount || ''}`);
       }
     }
 

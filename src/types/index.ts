@@ -49,6 +49,7 @@ export interface CustomFieldsConfig {
   ustSatz: string | null;
   nettoBetrag: string | null;
   ustBetrag: string | null;
+  privatanteil: string | null;
   llmConfidence: string | null;
   originalTitle: string | null;
   aisummary: string | null;
@@ -65,6 +66,7 @@ export interface ResolvedCustomFields {
   ustSatz: number | null;
   nettoBetrag: number | null;
   ustBetrag: number | null;
+  privatanteil: number | null;
   llmConfidence: number | null;
   originalTitle: number | null;
   aisummary: number | null;
@@ -143,6 +145,7 @@ export interface ExtractedInvoiceData {
   ustSatz: number | null;
   nettoBetrag: number | null;
   ustBetrag: number | null;
+  privatanteil: number | null;
   llmConfidence: number | null;
   summary: string | null;
 }

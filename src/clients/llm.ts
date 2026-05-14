@@ -35,6 +35,7 @@ Return a JSON object with exactly these fields:
   "ustSatz": number or null,
   "nettoBetrag": number or null,
   "ustBetrag": number or null,
+  "privatanteil": number (0-100) or null,
   "llmConfidence": 0-100 integer,
   "summary": "one sentence summary or null"
 }
@@ -43,6 +44,7 @@ Rules:
 - invoiceDate must be YYYY-MM-DD format
 - All amounts use dot as decimal separator (e.g. 42.50)
 - invoiceCategory "gewerbe" = business expense, "private" = personal purchase
+- privatanteil: percentage of private (non-business) use. Set to 90 for house/building fees (Hausgebühren, Betriebskosten, Hausverwaltung). Set to 20 for telephone and internet services. Set to null for all other invoices.
 - If isInvoice is false, set all other fields to null
 - Return ONLY the JSON object, no markdown, no extra text`,
 
@@ -300,6 +302,7 @@ export class LlmClient {
       ustSatz: null,
       nettoBetrag: null,
       ustBetrag: null,
+      privatanteil: null,
       llmConfidence: null,
       summary: null,
     };
@@ -458,7 +461,7 @@ Use null if a field is not visible in the image.`;
       }
 
       // Normalize numeric fields: handle comma decimals and string numbers
-      if (['invoiceTotal', 'nettoBetrag', 'ustBetrag', 'llmConfidence'].includes(key)) {
+      if (['invoiceTotal', 'nettoBetrag', 'ustBetrag', 'privatanteil', 'llmConfidence'].includes(key)) {
         const str = String(value).replace(',', '.');
         const num = Number(str);
         result[key] = isNaN(num) ? null : num;
@@ -518,6 +521,7 @@ Use null if a field is not visible in the image.`;
         ustSatz: isInvoice ? this.normalizeNumeric(parsed.ustSatz, 'highest') : null,
         nettoBetrag: isInvoice && parsed.nettoBetrag !== undefined ? Number(String(parsed.nettoBetrag).replace(',', '.')) || null : null,
         ustBetrag: isInvoice ? this.normalizeNumeric(parsed.ustBetrag, 'sum') : null,
+        privatanteil: isInvoice && parsed.privatanteil !== undefined && parsed.privatanteil !== null ? Number(parsed.privatanteil) || null : null,
         llmConfidence: parsed.llmConfidence !== undefined ? Number(parsed.llmConfidence) : null,
         summary: typeof parsed.summary === 'string' ? parsed.summary.substring(0, 150) : null,
       };
