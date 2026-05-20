@@ -37,9 +37,9 @@ npm run dev process
 # Process single document
 npm run dev process -- --id 1234
 
-# Dry run (no changes)
+# Dry run (no changes) — good for testing prompt changes
 npm run dev dry-run
-npm run dev dry-run -- --id 1234
+npm run dev dry-run -- --id 1234   # test a specific document first, then process
 
 # List custom fields
 npm run dev list-fields
