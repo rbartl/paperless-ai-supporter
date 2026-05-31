@@ -50,7 +50,7 @@ IMPORTANT: The document title may be WRONG (from a previous incorrect classifica
   - Municipality invoices: "Marktgemeinde", "Stadtgemeinde", "Gemeinde" are vendors.
   - The document title may contain the vendor name as a hint.
   - For willhaben: the seller username is the vendor.
-  - wrong vendors: "Steuerberatung", your tax advisor's name
+  - wrong vendors: "Steuerberatung"
   - If vendor cannot be determined or unsure, use null.
 
 - invoiceCategory: Determine if this is a PRIVATE or BUSINESS invoice:
