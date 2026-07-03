@@ -36,10 +36,13 @@ export class InvoiceProcessor {
     return results;
   }
 
-  async processDocument(documentId: number, dryRun = false): Promise<ProcessingResult> {
+  async processDocument(documentId: number, dryRun = false, note?: string): Promise<ProcessingResult> {
     try {
       const document = await this.paperless.getDocument(documentId);
       console.log(`\nProcessing document ${documentId}: "${document.title}"`);
+      if (note && note.trim()) {
+        console.log(`  Note: ${note.trim()}`);
+      }
 
       const content = document.content;
       const hasNoText = !content || content.trim().length === 0;
@@ -58,7 +61,7 @@ export class InvoiceProcessor {
         console.log(`  No text content, using vision fallback...`);
         try {
           const preview = await this.paperless.getDocumentPreview(documentId);
-          extractedData = await this.llm.extractWithVision(preview, this.llm.getEmptyExtractionSeed());
+          extractedData = await this.llm.extractWithVision(preview, this.llm.getEmptyExtractionSeed(), 2, note);
           console.log(`  → vision(no-text): vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
         } catch (error) {
           console.log(`  Vision (no-text) error: ${error instanceof Error ? error.message : error}`);
@@ -70,7 +73,7 @@ export class InvoiceProcessor {
           };
         }
       } else {
-        extractedData = await this.llm.extractInvoiceData(content, document.title);
+        extractedData = await this.llm.extractInvoiceData(content, document.title, 3, note);
         console.log(`  → vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'} | conf:${extractedData.llmConfidence ?? '?'}%`);
       }
 
@@ -79,7 +82,7 @@ export class InvoiceProcessor {
         console.log(`  Vision fallback...`);
         try {
           const preview = await this.paperless.getDocumentPreview(documentId);
-          extractedData = await this.llm.extractWithVision(preview, extractedData);
+          extractedData = await this.llm.extractWithVision(preview, extractedData, 2, note);
           console.log(`  → vision: vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
         } catch (error) {
           console.log(`  Vision error: ${error instanceof Error ? error.message : error}`);
@@ -96,7 +99,7 @@ export class InvoiceProcessor {
         try {
           const preview = await this.paperless.getDocumentPreview(documentId);
           const visionSeed: ExtractedInvoiceData = { ...extractedData, isInvoice: true };
-          extractedData = await this.llm.extractWithVision(preview, visionSeed);
+          extractedData = await this.llm.extractWithVision(preview, visionSeed, 2, note);
           console.log(`  → vision(low-conf): vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
 
           // If vision filled at least vendor and total, treat as invoice

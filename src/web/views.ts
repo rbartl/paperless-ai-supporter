@@ -432,12 +432,16 @@ function queueDocRow(doc: PaperlessDocument, paperlessUrl: string): string {
   <td>${escHtml(doc.title)}</td>
   <td class="text-muted mono" style="font-size:0.8rem">${formatDate(doc.added)}</td>
   <td>
-    <button class="btn btn-accent"
-      hx-post="/queue/${doc.id}/process"
-      hx-target="#queue-row-${doc.id}"
-      hx-swap="outerHTML">
-      ${spinIcon}Process
-    </button>
+    <form hx-post="/queue/${doc.id}/process"
+          hx-target="#queue-row-${doc.id}"
+          hx-swap="outerHTML"
+          class="d-flex flex-column gap-1">
+      <textarea name="note" rows="2"
+                class="form-control form-control-sm"
+                style="font-size:0.78rem;resize:vertical;min-height:2.8rem"
+                placeholder="Notes for AI (overrides classification rules)…"></textarea>
+      <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
+    </form>
   </td>
 </tr>`;
 }
@@ -461,11 +465,16 @@ export function queuePage(
   </div>
   <div class="card-body">
     <div class="text-muted mb-2" style="font-size:0.83rem">Process any document from Paperless regardless of queue tag.</div>
-    <form hx-post="/queue/process-id" hx-target="#process-id-result" hx-swap="innerHTML"
-          class="d-flex gap-2 align-items-center">
-      <input type="number" name="docId" placeholder="Document ID" min="1"
-             class="form-control form-control-sm mono" style="width:140px">
-      <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
+    <form hx-post="/queue/process-id" hx-target="#process-id-result" hx-swap="innerHTML">
+      <div class="d-flex gap-2 align-items-center mb-1">
+        <input type="number" name="docId" placeholder="Document ID" min="1"
+               class="form-control form-control-sm mono" style="width:140px">
+        <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
+      </div>
+      <textarea name="note" rows="2"
+                class="form-control form-control-sm"
+                style="font-size:0.78rem;resize:vertical;max-width:500px"
+                placeholder="Notes for AI (overrides classification rules)…"></textarea>
     </form>
     <div id="process-id-result" class="mt-2"></div>
   </div>

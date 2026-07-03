@@ -176,10 +176,11 @@ export async function startWebServer(
 
   app.post('/queue/:docId/process', async (req, res) => {
     const docId = parseInt(req.params.docId, 10);
+    const note = typeof req.body.note === 'string' ? req.body.note : undefined;
     try {
       console.log(`[queue] processing document #${docId}`);
       const result = await broadcaster.capture(() =>
-        processor.processDocument(docId, false)
+        processor.processDocument(docId, false, note)
       );
       const saved = repo.save(result, false, config.llm.text.model);
       console.log(`[queue] done → result #${saved.id}, success=${!!result.success}, skipped=${!!result.skipped}`);
@@ -200,6 +201,7 @@ export async function startWebServer(
 
   app.post('/queue/process-id', async (req, res) => {
     const docId = parseInt(req.body.docId as string, 10);
+    const note = typeof req.body.note === 'string' ? req.body.note : undefined;
     if (isNaN(docId) || docId < 1) {
       res.status(400).send('<span class="text-danger">Invalid document ID.</span>');
       return;
@@ -207,7 +209,7 @@ export async function startWebServer(
     try {
       console.log(`[process-id] document #${docId}`);
       const result = await broadcaster.capture(() =>
-        processor.processDocument(docId, false)
+        processor.processDocument(docId, false, note)
       );
       const saved = repo.save(result, false, config.llm.text.model);
       console.log(`[process-id] done → result #${saved.id}, success=${!!result.success}, skipped=${!!result.skipped}`);
