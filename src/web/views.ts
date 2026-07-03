@@ -543,15 +543,24 @@ export function queueProcessedRow(
     ? JSON.parse(result.extracted_json)
     : null;
   const docTitle = result.new_title || result.document_title;
-  const vendor = data?.vendor ?? '–';
 
-  return `<tr id="queue-row-${result.document_id}" class="table-success">
+  const cur = data?.currency ?? 'EUR';
+  const amount = data?.invoiceTotal != null ? `${cur} ${Number(data.invoiceTotal).toFixed(2)}` : null;
+  const infoLine = [data?.vendor, data?.invoiceNumber, amount].filter(Boolean).join(' · ')
+    || (!result.success ? result.error_message : null);
+
+  const rowClass = !result.success ? 'table-danger' : result.skipped ? 'table-warning' : 'table-success';
+
+  return `<tr id="queue-row-${result.document_id}" class="${rowClass}">
   <td><a href="${paperlessUrl}/documents/${result.document_id}/details" target="_blank" class="mono text-decoration-none">#${result.document_id}</a></td>
   <td>
     <div>${escHtml(docTitle)}</div>
-    <div class="text-muted" style="font-size:0.78rem">${escHtml(vendor)}</div>
+    ${infoLine ? `<div class="text-muted" style="font-size:0.78rem">${escHtml(infoLine)}</div>` : ''}
   </td>
-  <td>${statusBadge(result)}</td>
+  <td>
+    ${statusBadge(result)}
+    ${data?.llmConfidence != null ? sub(confidenceHtml(data.llmConfidence)) : ''}
+  </td>
   <td><a href="/results/${result.id}" class="btn btn-outline-secondary btn-outline-sm">Detail</a></td>
 </tr>`;
 }
