@@ -52,7 +52,7 @@ export async function startWebServer(
 ): Promise<void> {
   const port = config.web?.port ?? 3000;
   const dbPath = config.web!.dbPath;
-  const paperlessUrl = envConfig.paperlessUrl;
+  const paperlessUrl = envConfig.paperlessPublicUrl;
 
   console.log(`Connecting to Paperless at ${paperlessUrl}`);
   console.log(`LLM model: ${config.llm.text.model}`);

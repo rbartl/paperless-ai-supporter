@@ -22,8 +22,11 @@ export function loadEnvConfig(): EnvConfig {
     throw new Error('PAPERLESS_API_TOKEN environment variable is required');
   }
 
+  const paperlessPublicUrl = process.env.PAPERLESS_PUBLIC_URL ?? paperlessUrl;
+
   return {
     paperlessUrl: paperlessUrl.replace(/\/$/, ''), // Remove trailing slash
+    paperlessPublicUrl: paperlessPublicUrl.replace(/\/$/, ''), // Remove trailing slash
     paperlessApiToken,
     cfAccessClientId: process.env.CF_ACCESS_CLIENT_ID,
     cfAccessClientSecret: process.env.CF_ACCESS_CLIENT_SECRET,
