@@ -124,6 +124,19 @@ export async function startWebServer(
     res.send(views.detailPage(row, paperlessUrl));
   });
 
+  // ── Save the manual override note for a result ───────────────────────────────
+
+  app.post('/results/:id/note', (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const note = typeof req.body.note === 'string' ? req.body.note : '';
+    if (!repo.findById(id)) {
+      res.status(404).send('<span class="text-danger">Not found.</span>');
+      return;
+    }
+    repo.updateNote(id, note);
+    res.send('<span class="text-success">Saved.</span>');
+  });
+
   // ── Retry a result ───────────────────────────────────────────────────────────
 
   app.post('/results/:id/retry', async (req, res) => {
@@ -132,12 +145,13 @@ export async function startWebServer(
       res.status(404).send('<tr><td colspan="9" class="text-danger">Not found.</td></tr>');
       return;
     }
+    const note = existing.note ?? undefined;
     try {
       console.log(`[retry] document #${existing.document_id} "${existing.document_title}" (result #${existing.id})`);
       const result = await broadcaster.capture(() =>
-        processor.processDocument(existing.document_id, false)
+        processor.processDocument(existing.document_id, false, note)
       );
-      const saved = repo.save(result, false, config.llm.text.model);
+      const saved = repo.save(result, false, config.llm.text.model, note);
       console.log(`[retry] done → result #${saved.id}, success=${!!result.success}, skipped=${!!result.skipped}`);
       const hxTarget = req.headers['hx-target'] as string | undefined;
       if (hxTarget === 'result-row-detail') {
@@ -182,7 +196,7 @@ export async function startWebServer(
       const result = await broadcaster.capture(() =>
         processor.processDocument(docId, false, note)
       );
-      const saved = repo.save(result, false, config.llm.text.model);
+      const saved = repo.save(result, false, config.llm.text.model, note);
       console.log(`[queue] done → result #${saved.id}, success=${!!result.success}, skipped=${!!result.skipped}`);
       res.send(views.queueProcessedRow(saved, paperlessUrl));
     } catch (err) {
@@ -211,7 +225,7 @@ export async function startWebServer(
       const result = await broadcaster.capture(() =>
         processor.processDocument(docId, false, note)
       );
-      const saved = repo.save(result, false, config.llm.text.model);
+      const saved = repo.save(result, false, config.llm.text.model, note);
       console.log(`[process-id] done → result #${saved.id}, success=${!!result.success}, skipped=${!!result.skipped}`);
       res.send(views.processIdResult(saved, paperlessUrl));
     } catch (err) {

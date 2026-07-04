@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS processing_results (
   dry_run INTEGER NOT NULL DEFAULT 0,
   error_message TEXT,
   extracted_json TEXT,
-  llm_model TEXT
+  llm_model TEXT,
+  note TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_document_id ON processing_results(document_id);
 CREATE INDEX IF NOT EXISTS idx_processed_at ON processing_results(processed_at);
@@ -25,14 +26,24 @@ export class ResultRepository {
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath);
     this.db.exec(DDL);
+    try {
+      this.db.exec('ALTER TABLE processing_results ADD COLUMN note TEXT');
+    } catch {
+      // column already exists
+    }
   }
 
-  save(result: ProcessingResult, dryRun: boolean, llmModel?: string): DbProcessingResult {
+  save(
+    result: ProcessingResult,
+    dryRun: boolean,
+    llmModel?: string,
+    note?: string | null
+  ): DbProcessingResult {
     const stmt = this.db.prepare(`
       INSERT INTO processing_results
-        (document_id, document_title, new_title, processed_at, success, skipped, dry_run, error_message, extracted_json, llm_model)
+        (document_id, document_title, new_title, processed_at, success, skipped, dry_run, error_message, extracted_json, llm_model, note)
       VALUES
-        (@document_id, @document_title, @new_title, @processed_at, @success, @skipped, @dry_run, @error_message, @extracted_json, @llm_model)
+        (@document_id, @document_title, @new_title, @processed_at, @success, @skipped, @dry_run, @error_message, @extracted_json, @llm_model, @note)
     `);
 
     const info = stmt.run({
@@ -46,9 +57,16 @@ export class ResultRepository {
       error_message: result.error ?? null,
       extracted_json: result.extractedData ? JSON.stringify(result.extractedData) : null,
       llm_model: llmModel ?? null,
+      note: note?.trim() || null,
     });
 
     return this.findById(Number(info.lastInsertRowid))!;
+  }
+
+  updateNote(id: number, note: string | null): void {
+    this.db
+      .prepare('UPDATE processing_results SET note = ? WHERE id = ?')
+      .run(note?.trim() || null, id);
   }
 
   findAll(limit = 500): DbProcessingResult[] {

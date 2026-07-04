@@ -361,6 +361,25 @@ export function detailPage(row: DbProcessingResult, paperlessUrl: string): strin
   </div>
   <div id="result-row-detail"></div>`;
 
+  const noteSection = `<div class="card mb-3">
+    <div class="card-header bg-transparent" style="font-size:0.85rem;font-weight:600;border-bottom:1px solid var(--border)">
+      Manual Override Note
+    </div>
+    <div class="card-body">
+      <form hx-post="/results/${row.id}/note" hx-target="#note-save-status" hx-swap="innerHTML">
+        <textarea name="note" rows="2"
+                  class="form-control form-control-sm"
+                  style="font-size:0.85rem;resize:vertical"
+                  placeholder="Notes for AI (overrides classification rules)…">${escHtml(row.note ?? '')}</textarea>
+        <div class="d-flex align-items-center gap-2 mt-2">
+          <button type="submit" class="btn btn-accent">Save</button>
+          <span id="note-save-status" class="text-muted" style="font-size:0.8rem"></span>
+        </div>
+      </form>
+      <div class="text-muted mt-1" style="font-size:0.78rem">Reused as the AI instruction when you click Retry.</div>
+    </div>
+  </div>`;
+
   const errorSection = row.error_message
     ? `<div class="card mb-3 p-3 border-danger">
         <div class="d-flex align-items-start gap-2">
@@ -426,7 +445,7 @@ export function detailPage(row: DbProcessingResult, paperlessUrl: string): strin
       </div>`
     : '';
 
-  const body = `${breadcrumb}${headerCard}${errorSection}${extractedSection}${rawSection}`;
+  const body = `${breadcrumb}${headerCard}${noteSection}${errorSection}${extractedSection}${rawSection}`;
   return layout(`Result #${row.id}`, body, 'results');
 }
 

@@ -22,6 +22,7 @@ export interface DbProcessingResult {
   error_message: string | null;
   extracted_json: string | null;
   llm_model: string | null;
+  note: string | null;
 }
 
 export interface PaperlessConfig {
