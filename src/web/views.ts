@@ -136,6 +136,12 @@ function confidenceHtml(val: number | null): string {
   return `<span class="${cls}">${pct}%</span>`;
 }
 
+function categoryBadge(category: 'private' | 'gewerbe' | null | undefined): string {
+  return category
+    ? `<span class="badge ${category === 'gewerbe' ? 'badge-success-soft' : 'badge-skipped-soft'} ms-1">${category}</span>`
+    : '';
+}
+
 function statusBadge(row: DbProcessingResult): string {
   const dryTag = row.dry_run ? ' <span class="badge badge-dryrun-soft ms-1">Dry Run</span>' : '';
   if (!row.success) return `<span class="badge badge-error-soft">Error</span>${dryTag}`;
@@ -174,9 +180,7 @@ export function resultRow(row: DbProcessingResult, paperlessUrl: string, newerRe
     ? new Date(data.invoiceDate).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '–';
 
-  const catBadge = data?.invoiceCategory
-    ? `<span class="badge ${data.invoiceCategory === 'gewerbe' ? 'badge-success-soft' : 'badge-skipped-soft'} ms-1">${data.invoiceCategory}</span>`
-    : '';
+  const catBadge = categoryBadge(data?.invoiceCategory);
 
   const ustLine = (data?.nettoBetrag != null || data?.ustBetrag != null)
     ? `Net ${fmt(data?.nettoBetrag)} + VAT ${fmt(data?.ustBetrag)}${data?.ustSatz != null ? ` (${data.ustSatz}%)` : ''}${data?.privatanteil != null ? ` · Privat ${data.privatanteil}%` : ''}`
@@ -546,8 +550,12 @@ export function queueProcessedRow(
 
   const cur = data?.currency ?? 'EUR';
   const amount = data?.invoiceTotal != null ? `${cur} ${Number(data.invoiceTotal).toFixed(2)}` : null;
-  const infoLine = [data?.vendor, data?.invoiceNumber, amount].filter(Boolean).join(' · ')
+  const infoText = [data?.vendor, data?.invoiceNumber, amount].filter(Boolean).join(' · ')
     || (!result.success ? result.error_message : null);
+  const catBadge = categoryBadge(data?.invoiceCategory);
+  const infoLine = infoText || catBadge
+    ? `<div class="text-muted" style="font-size:0.78rem">${infoText ? escHtml(infoText) : ''}${catBadge}</div>`
+    : '';
 
   const rowClass = !result.success ? 'table-danger' : result.skipped ? 'table-warning' : 'table-success';
 
@@ -555,7 +563,7 @@ export function queueProcessedRow(
   <td><a href="${paperlessUrl}/documents/${result.document_id}/details" target="_blank" class="mono text-decoration-none">#${result.document_id}</a></td>
   <td>
     <div>${escHtml(docTitle)}</div>
-    ${infoLine ? `<div class="text-muted" style="font-size:0.78rem">${escHtml(infoLine)}</div>` : ''}
+    ${infoLine}
   </td>
   <td>
     ${statusBadge(result)}
