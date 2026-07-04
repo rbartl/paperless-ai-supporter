@@ -553,8 +553,11 @@ export function queueProcessedRow(
   const infoText = [data?.vendor, data?.invoiceNumber, amount].filter(Boolean).join(' · ')
     || (!result.success ? result.error_message : null);
   const catBadge = categoryBadge(data?.invoiceCategory);
-  const infoLine = infoText || catBadge
-    ? `<div class="text-muted" style="font-size:0.78rem">${infoText ? escHtml(infoText) : ''}${catBadge}</div>`
+  const taxBadge = data?.taxAccount
+    ? `<span class="badge bg-secondary bg-opacity-10 text-dark ms-1">${escHtml(data.taxAccount)}</span>`
+    : '';
+  const infoLine = infoText || catBadge || taxBadge
+    ? `<div class="text-muted" style="font-size:0.78rem">${infoText ? escHtml(infoText) : ''}${catBadge}${taxBadge}</div>`
     : '';
 
   const rowClass = !result.success ? 'table-danger' : result.skipped ? 'table-warning' : 'table-success';
