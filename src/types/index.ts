@@ -91,6 +91,7 @@ export interface LlmConfig {
 
 export interface EnvConfig {
   paperlessUrl: string;
+  paperlessPublicUrl: string;
   paperlessApiToken: string;
   cfAccessClientId?: string;
   cfAccessClientSecret?: string;

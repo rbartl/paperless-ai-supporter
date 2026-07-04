@@ -180,7 +180,7 @@ export class LlmClient {
       + '\n[... truncated]';
   }
 
-  private buildPrompt(documentContent: string, documentTitle?: string): string {
+  private buildPrompt(documentContent: string, documentTitle?: string, note?: string): string {
     let userPrompt = this.extractionPrompt.replace('{{DOCUMENT_CONTENT}}', documentContent);
 
     if (documentTitle) {
@@ -193,18 +193,22 @@ export class LlmClient {
       userPrompt = `${userPrompt}\n\n${this.customRules}`;
     }
 
+    if (note && note.trim()) {
+      userPrompt = `${userPrompt}\n\n---\nCRITICAL USER INSTRUCTION (highest priority — overrides all other rules and classifications):\n${note.trim()}\n---`;
+    }
+
     return userPrompt;
   }
 
-  async extractInvoiceData(documentContent: string, documentTitle?: string, retries = 3): Promise<ExtractedInvoiceData> {
+  async extractInvoiceData(documentContent: string, documentTitle?: string, retries = 3, note?: string): Promise<ExtractedInvoiceData> {
     // First attempt with truncated content
     const truncatedContent = this.truncateContent(documentContent);
-    const result = await this.callTextLlm(truncatedContent, documentTitle, retries);
+    const result = await this.callTextLlm(truncatedContent, documentTitle, retries, note);
 
     // If the model said isInvoice: false but the text contains strong invoice indicators, retry with full content
     if (!result.isInvoice && this.hasInvoiceIndicators(documentContent)) {
       console.log(`    Retrying with full content (invoice indicators found in text)...`);
-      const retryResult = await this.callTextLlm(documentContent, documentTitle, retries);
+      const retryResult = await this.callTextLlm(documentContent, documentTitle, retries, note);
       if (retryResult.isInvoice) {
         return retryResult;
       }
@@ -228,8 +232,8 @@ export class LlmClient {
     return indicators.some(pattern => pattern.test(content));
   }
 
-  private async callTextLlm(documentContent: string, documentTitle?: string, retries = 3): Promise<ExtractedInvoiceData> {
-    const userPrompt = this.buildPrompt(documentContent, documentTitle);
+  private async callTextLlm(documentContent: string, documentTitle?: string, retries = 3, note?: string): Promise<ExtractedInvoiceData> {
+    const userPrompt = this.buildPrompt(documentContent, documentTitle, note);
 
     const messages: ChatMessage[] = [
       { role: 'system', content: this.systemPrompt },
@@ -323,7 +327,8 @@ export class LlmClient {
   async extractWithVision(
     image: { buffer: Buffer; mimeType: string },
     currentData: ExtractedInvoiceData,
-    retries = 2
+    retries = 2,
+    note?: string
   ): Promise<ExtractedInvoiceData> {
     const missingFields = this.visionFallback.fields.filter((f) =>
       this.isFieldValueEmpty(currentData[f as keyof ExtractedInvoiceData])
@@ -335,6 +340,9 @@ export class LlmClient {
     const customRulesSection = this.customRules
       ? `\nUser rules for category (apply when they fit):\n${this.customRules}`
       : '';
+    const criticalNoteSection = note && note.trim()
+      ? `\n\n---\nCRITICAL USER INSTRUCTION (highest priority — overrides all other rules and classifications):\n${note.trim()}\n---`
+      : '';
     const jsonExample = `{\n  ${missingFields.map((f) => `"${f}": "..."`).join(',\n  ')},\n  "invoiceCategory": "private" or "gewerbe"\n}`;
 
     const prompt = this.visionPrompt
@@ -343,6 +351,7 @@ export class LlmClient {
           .replace('{{CURRENT_DATA_JSON}}', JSON.stringify(currentData, null, 2))
           .replace('{{CUSTOM_RULES_SECTION}}', customRulesSection)
           .replace('{{JSON_EXAMPLE}}', jsonExample)
+          + criticalNoteSection
       : `Look at this invoice image and extract the following missing fields:
 ${missingFields.map((f) => `- ${f}`).join('\n')}
 
@@ -360,7 +369,7 @@ ${customRulesSection}
 Return ONLY valid JSON with the missing fields filled in where visible, and always include invoiceCategory:
 ${jsonExample}
 
-Use null if a field is not visible in the image.`;
+Use null if a field is not visible in the image.${criticalNoteSection}`;
 
     const messages: ChatMessage[] = [
       { role: 'system', content: this.systemPrompt },

@@ -1,0 +1,141 @@
+First, determine if this document is an invoice/receipt. Then extract the fields.
+NOTE: The document text comes from OCR and may contain garbled/misspelled words. Try to interpret partial matches (e.g., "Mach jaMark" = "MediaMarkt", "YIVDAC TIVE" = "Vivoactive").
+IMPORTANT: The document title may be WRONG (from a previous incorrect classification). Always base your extraction on the actual document CONTENT, not the title. If the content contradicts the title, trust the content.
+
+- isInvoice: true if this is an invoice, receipt, bill, proof of purchase, OR credit card/bank statement. false if it's something else
+  (e.g., certificate, letter, form, manual, registration document).
+  IMPORTANT: "Vertragsrechnung" (contract invoice, e.g., maintenance/Wartungsvertrag) IS an invoice → isInvoice: true.
+  IMPORTANT: Willhaben purchases/chats showing a price and seller are valid purchase documents → isInvoice: true.
+  Private marketplace purchases (willhaben, eBay Kleinanzeigen, etc.) count as invoices with ustSatz "0".
+  All willhaben purchases are business purchases → invoiceCategory: "gewerbe".
+  For willhaben: determine taxAccount based on what was purchased (e.g., PC hardware → GWG, materials for resale → WEK).
+  Credit card statements (Kreditkartenabrechnung) and bank statements (Kontoauszug) → isInvoice: true, taxAccount: "KK".
+  For KK statements: use the statement date (YYYYMMDD format) as invoiceNumber (e.g., "20250926").
+  IMPORTANT: If the document contains "Rechnungs-Nr", "Rechnungsnummer", "Rechnung Nr.", "Total", "Gesamtbetrag", or "Mehrwertsteuer" it IS an invoice.
+
+- invoiceNumber: The invoice number ("Rechnungsnummer", "Rechnungs-Nr", "Invoice No", "Rechnung Nr.", "Nummer:", "Bonnr.", "BonNr.", "Beleg-Nr.", "Kassen ID").
+  This is the unique identifier assigned by the seller to this specific invoice.
+  IMPORTANT: "Nummer:" is the invoice number, NOT "Kundennummer:" (customer number) and NOT "Wartungsvertragsnummer:" or "Vertragsnummer:".
+  For receipts/Kassenbons: Look for "Bonnr." or "BonNr." - the number may be on a separate line below the header.
+  Example table format: "BonNr. Datum Zeit" header, then "01539154 03.10.25 10:40" → invoiceNumber is "01539154".
+
+- invoiceDate: The invoice or order date (format: YYYY-MM-DD)
+
+- invoiceTotal: The total amount including tax (number only, e.g., 123.45)
+  Look for "Total", "Gesamtbetrag", "Rechnungsbetrag", "Brutto", "Total in EUR".
+  This is the GROSS amount (netto + tax), NOT the net amount.
+
+- currency: The 3-letter currency code (e.g., "EUR", "USD", "GBP"). Default to null if unclear.
+
+- ustSatz: Array of ALL VAT percentage rates found on the invoice.
+  DO NOT GUESS. Only use rates explicitly stated on the invoice.
+  Examples:
+  - Invoice shows only "20% USt" → ustSatz: [20]
+  - Invoice shows "0% Umsatzsteuer" and "10% Umsatzsteuer" → ustSatz: [0, 10]
+  - No VAT mentioned → ustSatz: [0]
+  IMPORTANT: These are PERCENTAGE numbers (like 20, 10, 0), NOT euro amounts!
+
+- nettoBetrag: The net amount WITHOUT tax (number only, e.g., 102.88).
+  Look for "Netto", "exkl. USt", "ohne USt", "Subtotal".
+
+- vendor: The seller/company who issued this invoice (the one receiving payment).
+  IMPORTANT:
+  - This is the SENDER of the invoice, NOT the recipient and NOT the bank.
+  - The recipient (after "Herrn", "Frau", "An:", addressed person) is NOT the vendor.
+  - Look for: "Abs.:" (Absender), letterhead, logo, footer with company info, signature block, "Mit freundlichen Grüßen".
+  - Names ending in "GmbH", "AG", "KG", "e.U.", "OG" are company names → likely the vendor.
+  - Text that looks like a company address (company name + street + postal code + city) at the top
+  or bottom of the document is typically the vendor.
+  - {{owner}} is only the vendor if {{companyName}} is also in the document
+  - Municipality invoices: "Marktgemeinde", "Stadtgemeinde", "Gemeinde" are vendors.
+  - The document title may contain the vendor name as a hint.
+  - For willhaben: the seller username is the vendor.
+  - wrong vendors: "Steuerberatung"
+  - If vendor cannot be determined or unsure, use null.
+
+- invoiceCategory: Determine if this is a PRIVATE or BUSINESS invoice:
+  - "private" = Personal/family expenses (medical bills for family members, private
+    purchases)
+  - "gewerbe" = Business expenses (office supplies, hosting, professional services,
+    company-related purchases, invoices addressed to a company or self-employed person)
+  IMPORTANT: Look at the recipient name. If addressed to a child's name or clearly personal
+  medical/dental bills for family members, it's "private".
+
+- taxAccount: ONLY for business invoices (invoiceCategory="gewerbe"). 
+  HINT: OCR text may be garbled. Use context clues: vendor name, price range, document title.
+  Electronics store receipts (MediaMarkt, Saturn, etc.) are typically "GWG" for items under €1000, "AFA" for items over €1000.
+  Categorize into ONE of:
+  AUSGABEN (expenses - invoices TO {{owner}} ):
+  - "GWG" = low-value assets, office supplies, small equipment, tools, Werkzeug, DDR, RAM, PC hardware, server hardware, Baumarkt items, Kabel, Baumaterial, Schrauben, Muttern, Kleinteile, hardware fasteners, smartwatches, smart devices, wearablese
+  - "GWG" = low cost assets, Batteries, Akkus, adapters, cables, festplatten
+  - "GWG" = low cost products, 3d printer parts and material
+  - "AFA" = Abschreibung (depreciation, larger assets from 1000, but NOT car-related)
+  - "PKWB" = PKW Bedarf (fuel, repairs, car insurance, ÖAMTC, car parts), Fahrzeugversicherung
+  - "LEAS" = Leasing (car leasing, Tesla leasing)
+  - "STROM" = Electricity bills
+  - "GAS" = Gas/heating bills, Heizung, Heizöl, Erdgas, ELCO Austria GmbH (Heizungswartung, Brenner, Kessel)
+  - "TOUR" = override GEB with TOUR in this case Tourismusinteressentenb., Tourismusbeitrag, Tourismusabgaben gebühren, Tourismusinteressentenbeiträge  (ustSatz:0) 
+  - "GEB" = Fees (Gemeinde-Gebühren, Grundsteuer, Abfall, Kanal, Müll, government fees)
+  - "TEL" = Telephone, mobile phone (yesss!, A1 Telekom, Drei, Magenta). Note: "20% privat" or similar on phone bills refers to private usage share, NOT invoiceCategory. Phone bills are always invoiceCategory "gewerbe" with taxAccount "TEL".
+  - "INT" = Internet services (A1, AI NET)
+  - "FRE" = Fremdleistung (external services, Google, Hetzner, AWS, OpenRouter, AI credits, cloud, SaaS, hosting, domains, API services, Handwerker, Dachdeckerei, Spenglerei, Installateur, Gebäude-Instandhaltung)
+  - "POR" = Porto (post, shipping, postal services)
+  - "WEK" = Wareneinkauf (materials bought, processed, resold)
+  - "LOHN" = Lohn/Gehalt (salary payments, Gehaltsüberweisung, Lohnzettel)
+  - "PV-GEH" = Pflichtversicherung Gehalt (employee insurance)
+  - "ÖGK" = ÖGK (Austrian health insurance)
+  - "PV-SVDG" = Sozialversicherungsanstalt
+  - "STB" = Steuerberatung (tax consulting, Honorarnote from Steuerberater)
+  - "KK" = Kreditkartenabrechnung / Kontoauszug (credit card statements, bank statements, Visa, etc.)
+  EINNAHMEN (income - invoices FROM {{owner}}):
+  - "E20" = Ausgangsrechnung mit 20% USt (invoice issued by {{owner}} with 20% VAT)
+  - "E00" = Ausgangsrechnung mit 0% USt / Reverse Charge (invoice issued by {{owner}} with 0% VAT)
+  Use null for private invoices or if no category clearly matches.
+
+- summary: A very short summary of the document in German (1-2 sentences, max 150 characters). Describe what the document is about. Always provide this, even if isInvoice is false.
+
+- llmConfidence: Your confidence in the extracted data as a percentage (0-100).
+  Consider: How clearly readable was the document? How certain are you about vendor, amounts, dates?
+  - 90-100: All fields clearly visible and unambiguous
+  - 70-89: Most fields clear, some minor uncertainty
+  - 50-69: Several fields uncertain or partially readable
+  - Below 50: Poor quality, many guesses
+
+- ustBetrag: Array of ALL VAT euro amounts found on the invoice
+  IMPORTANT: These are euro AMOUNTS (not percentages!). Use dot as decimal separator.
+
+EXAMPLE 1 (single VAT rate):
+"Firma XY GmbH ... RECHNUNG ... Rechnungs-Nr: 12345 ... Datum: 15.03.2025 ... Netto: 100.00 ... Mehrwertsteuer 20,00 % von 100.00: 20.00 ... Total in EUR 120.00"
+→ {"isInvoice":true,"invoiceNumber":"12345","invoiceDate":"2025-03-15","invoiceTotal":120.00,"currency":"EUR","vendor":"Firma XY GmbH","invoiceCategory":"gewerbe","taxAccount":"FRE","ustSatz":[20],"nettoBetrag":100.00,"ustBetrag":[20.00],"llmConfidence":95}
+
+EXAMPLE 2 (multiple VAT rates):
+"Gemeinde ABC ... Vorschreibung Nr 99060 ... 01.05.2025 ... 0% USt: 0,00 ... 10% USt: 13.36 ... Gesamt: 163.36"
+→ {"isInvoice":true,"invoiceNumber":"99060","invoiceDate":"2025-05-01","invoiceTotal":163.36,"currency":"EUR","vendor":"Gemeinde ABC","invoiceCategory":"gewerbe","taxAccount":"GEB","ustSatz":[0,10],"nettoBetrag":150.00,"ustBetrag":[0.00,13.36],"llmConfidence":90}
+
+Respond ONLY with valid JSON. ustSatz and ustBetrag are ALWAYS plain arrays of numbers, NEVER objects:
+{
+  "isInvoice": true,
+  "invoiceNumber": "...",
+  "invoiceDate": "YYYY-MM-DD",
+  "invoiceTotal": 123.45,
+  "currency": "EUR",
+  "vendor": "...",
+  "invoiceCategory": "private" or "gewerbe",
+  "taxAccount": "..." or null for private,
+  "ustSatz": [20],
+  "nettoBetrag": 102.88,
+  "ustBetrag": [20.57],
+  "llmConfidence": 85,
+  "summary": "Rechnung von Firma XY für Hosting-Dienste, EUR 120,00"
+}
+
+If isInvoice is false, set all other fields to null EXCEPT summary (always provide a summary).
+
+Use null for fields that cannot be determined.
+
+Document title: {{DOCUMENT_TITLE}}
+
+Document content:
+---
+{{DOCUMENT_CONTENT}}
+---

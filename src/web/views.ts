@@ -136,6 +136,12 @@ function confidenceHtml(val: number | null): string {
   return `<span class="${cls}">${pct}%</span>`;
 }
 
+function categoryBadge(category: 'private' | 'gewerbe' | null | undefined): string {
+  return category
+    ? `<span class="badge ${category === 'gewerbe' ? 'badge-success-soft' : 'badge-skipped-soft'} ms-1">${category}</span>`
+    : '';
+}
+
 function statusBadge(row: DbProcessingResult): string {
   const dryTag = row.dry_run ? ' <span class="badge badge-dryrun-soft ms-1">Dry Run</span>' : '';
   if (!row.success) return `<span class="badge badge-error-soft">Error</span>${dryTag}`;
@@ -174,9 +180,7 @@ export function resultRow(row: DbProcessingResult, paperlessUrl: string, newerRe
     ? new Date(data.invoiceDate).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '–';
 
-  const catBadge = data?.invoiceCategory
-    ? `<span class="badge ${data.invoiceCategory === 'gewerbe' ? 'badge-success-soft' : 'badge-skipped-soft'} ms-1">${data.invoiceCategory}</span>`
-    : '';
+  const catBadge = categoryBadge(data?.invoiceCategory);
 
   const ustLine = (data?.nettoBetrag != null || data?.ustBetrag != null)
     ? `Net ${fmt(data?.nettoBetrag)} + VAT ${fmt(data?.ustBetrag)}${data?.ustSatz != null ? ` (${data.ustSatz}%)` : ''}${data?.privatanteil != null ? ` · Privat ${data.privatanteil}%` : ''}`
@@ -432,12 +436,16 @@ function queueDocRow(doc: PaperlessDocument, paperlessUrl: string): string {
   <td>${escHtml(doc.title)}</td>
   <td class="text-muted mono" style="font-size:0.8rem">${formatDate(doc.added)}</td>
   <td>
-    <button class="btn btn-accent"
-      hx-post="/queue/${doc.id}/process"
-      hx-target="#queue-row-${doc.id}"
-      hx-swap="outerHTML">
-      ${spinIcon}Process
-    </button>
+    <form hx-post="/queue/${doc.id}/process"
+          hx-target="#queue-row-${doc.id}"
+          hx-swap="outerHTML"
+          class="d-flex flex-column gap-1">
+      <textarea name="note" rows="2"
+                class="form-control form-control-sm"
+                style="font-size:0.78rem;resize:vertical;min-height:2.8rem"
+                placeholder="Notes for AI (overrides classification rules)…"></textarea>
+      <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
+    </form>
   </td>
 </tr>`;
 }
@@ -461,11 +469,16 @@ export function queuePage(
   </div>
   <div class="card-body">
     <div class="text-muted mb-2" style="font-size:0.83rem">Process any document from Paperless regardless of queue tag.</div>
-    <form hx-post="/queue/process-id" hx-target="#process-id-result" hx-swap="innerHTML"
-          class="d-flex gap-2 align-items-center">
-      <input type="number" name="docId" placeholder="Document ID" min="1"
-             class="form-control form-control-sm mono" style="width:140px">
-      <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
+    <form hx-post="/queue/process-id" hx-target="#process-id-result" hx-swap="innerHTML">
+      <div class="d-flex gap-2 align-items-center mb-1">
+        <input type="number" name="docId" placeholder="Document ID" min="1"
+               class="form-control form-control-sm mono" style="width:140px">
+        <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
+      </div>
+      <textarea name="note" rows="2"
+                class="form-control form-control-sm"
+                style="font-size:0.78rem;resize:vertical;max-width:500px"
+                placeholder="Notes for AI (overrides classification rules)…"></textarea>
     </form>
     <div id="process-id-result" class="mt-2"></div>
   </div>
@@ -534,15 +547,28 @@ export function queueProcessedRow(
     ? JSON.parse(result.extracted_json)
     : null;
   const docTitle = result.new_title || result.document_title;
-  const vendor = data?.vendor ?? '–';
 
-  return `<tr id="queue-row-${result.document_id}" class="table-success">
+  const cur = data?.currency ?? 'EUR';
+  const amount = data?.invoiceTotal != null ? `${cur} ${Number(data.invoiceTotal).toFixed(2)}` : null;
+  const infoText = [data?.vendor, data?.invoiceNumber, amount].filter(Boolean).join(' · ')
+    || (!result.success ? result.error_message : null);
+  const catBadge = categoryBadge(data?.invoiceCategory);
+  const infoLine = infoText || catBadge
+    ? `<div class="text-muted" style="font-size:0.78rem">${infoText ? escHtml(infoText) : ''}${catBadge}</div>`
+    : '';
+
+  const rowClass = !result.success ? 'table-danger' : result.skipped ? 'table-warning' : 'table-success';
+
+  return `<tr id="queue-row-${result.document_id}" class="${rowClass}">
   <td><a href="${paperlessUrl}/documents/${result.document_id}/details" target="_blank" class="mono text-decoration-none">#${result.document_id}</a></td>
   <td>
     <div>${escHtml(docTitle)}</div>
-    <div class="text-muted" style="font-size:0.78rem">${escHtml(vendor)}</div>
+    ${infoLine}
   </td>
-  <td>${statusBadge(result)}</td>
+  <td>
+    ${statusBadge(result)}
+    ${data?.llmConfidence != null ? sub(confidenceHtml(data.llmConfidence)) : ''}
+  </td>
   <td><a href="/results/${result.id}" class="btn btn-outline-secondary btn-outline-sm">Detail</a></td>
 </tr>`;
 }

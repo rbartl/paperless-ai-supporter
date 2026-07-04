@@ -1,0 +1,41 @@
+Rule If the document contains "amazon.de" or "amazon.at" anywhere in the text,
+   set vendor to exactly "Amazon" 
+
+Rule The invoiceNumber should be the "Rechnungsnummer" field, not the "Bestellnummer".
+
+Rule TOURISMUS: If the document contains "Tourismusgesetz", "Tourismusbeitrag", or "Beitragserklärung"
+   → taxAccount: "TOUR", invoiceCategory: "gewerbe", ustSatz: [0].
+
+Rule GEMEINDE: If the document contains "Marktgemeinde", "Stadtgemeinde", or "Gemeinde" as vendor,
+   these are municipal fee invoices → taxAccount: "GEB", invoiceCategory: "gewerbe".
+   EXCEPTION: If the TOURISMUS rule above applies, use "TOUR" instead of "GEB".
+
+Rule VERTRAGSRECHNUNG: A "Vertragsrechnung" (contract invoice, maintenance invoice) IS an invoice → isInvoice: true.
+   Documents containing "Rechnungs-Nr" or "Rechnungsnummer" are always invoices.
+
+Rule HARDWARE/FASTENERS: If the document or title contains screws, bolts, nuts, Schrauben, Muttern,
+   or similar hardware parts (e.g., "sourcing map", "UNF", "Sechskant") → taxAccount: "GWG", invoiceCategory: "gewerbe".
+
+Rule POOL/GARDEN: If the document contains pool or garden related items (Siedesalz, Siedegewerbesalz,
+   Whirlpool, Filtermaterial, Filterbälle, Poolchemie, Chlor, pH-Mittel, Skimmer, Poolzubehör, Gartenmöbel,
+   Pflanzen, Erde, Rasenmäher) → invoiceCategory: "private", taxAccount: null.
+
+Rule SVS:
+   IF document contains "Sozialversicherungsanstalt der Selbständigen":
+   - IF it ALSO contains "Vergütungsaufstellung" → invoiceCategory: "private", taxAccount: null
+   - OTHERWISE → invoiceCategory: "gewerbe", taxAccount: "PV-SVDG", ustSatz:[0],
+     nettoBetrag=absolute(GESAMTSUMME), invoiceTotal=absolute(nettoBeitrag),
+     use Date of the document as Invoicenumber
+
+Rule Private: If the document contains
+   "Mein Gesundheitskonto", "OeMAG Abwicklungsstelle", "Leistungserbringer/Leistungsart",
+   "Behandlung", "Diagnose", "ICD", "Vergütungsaufstellung"
+   then set invoiceCategory: "private", taxAccount: null. This rule ALWAYS wins.
+
+Rule EINNAHMEN (ALWAYS WINS - highest priority rule):
+   If the document contains the phrase "Hiermit erlaube ich mir folgende Dienstleistungen in Rechnung zu stellen"
+   - The other company shown is the RECIPIENT (Rechnungsempfänger)
+   - invoiceCategory: "gewerbe"
+   - taxAccount: "E20" if ustSatz contains 20, "E00" if ustSatz is 0
+   - Do NOT use FRE, GWG, AFA, or any other AUSGABEN category
+   This rule ALWAYS overrides any other classification.
