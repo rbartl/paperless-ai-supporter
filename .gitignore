@@ -9,3 +9,4 @@ config.yaml
 prompts
 data/
 edvbartl-ansible
+LOCAL_NOTES.md
