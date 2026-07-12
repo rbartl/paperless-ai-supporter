@@ -7,7 +7,7 @@ import { ExtractedInvoiceData, LlmConfig } from '../types/index.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROMPTS_DIR = join(__dirname, '../../prompts');
 
-const DEFAULT_MAX_CONTENT_LENGTH = 3500;
+const DEFAULT_MAX_CONTENT_LENGTH = 10000;
 
 const DEFAULT_PROMPTS: Record<string, string> = {
   'system.txt': `You are an invoice data extraction assistant for Austrian/German accounting.

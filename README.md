@@ -66,7 +66,7 @@ npm run dev list-tags
 
 - **Keyword proximity matters**: Small models associate keywords better when they are close together in the prompt. If a single long list doesn't work, split it into multiple lines with the same category label. Example: two separate `"GWG" = ...` lines work better than one huge line with all keywords.
 - **English keywords** sometimes work better than German ones, even for German documents (e.g., "Batteries" instead of "Batterien").
-- **Content truncation** (`maxContentLength` in config.yaml) helps a lot - marketing text or cover letters on page 3+ confuse small models. Default is 3500 chars.
+- **Content truncation** (`maxContentLength` in config.yaml) helps a lot - marketing text or cover letters on page 3+ confuse small models. Default is 10000 chars.
 - **Retry logic**: If the model says `isInvoice: false` but the text contains invoice indicators (Rechnungs-Nr, Mehrwertsteuer, etc.), a second attempt with full content is made automatically.
 - **Custom rules** (`prompts/custom-rules.txt`) are the most reliable way to handle specific vendors or product types that the model consistently misclassifies. These are appended to the prompt and act as explicit overrides.
 - **OCR hint** at the top of the extraction prompt reminds the model that text may be garbled and to interpret partial matches.
