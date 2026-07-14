@@ -490,8 +490,8 @@ export function queuePage(
     <div class="text-muted mb-2" style="font-size:0.83rem">Process any document from Paperless regardless of queue tag.</div>
     <form hx-post="/queue/process-id" hx-target="#process-id-result" hx-swap="innerHTML">
       <div class="d-flex gap-2 align-items-center mb-1">
-        <input type="number" name="docId" placeholder="Document ID" min="1"
-               class="form-control form-control-sm mono" style="width:140px">
+        <input type="text" name="docId" placeholder="Document ID(s), e.g. 123, 456, 789"
+               class="form-control form-control-sm mono" style="width:260px">
         <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
       </div>
       <textarea name="note" rows="2"

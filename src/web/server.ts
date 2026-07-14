@@ -214,25 +214,34 @@ export async function startWebServer(
   // ── Process any document by ID (not necessarily in queue) ───────────────────
 
   app.post('/queue/process-id', async (req, res) => {
-    const docId = parseInt(req.body.docId as string, 10);
+    const docIds = [...new Set(
+      String(req.body.docId ?? '')
+        .split(/[\s,]+/)
+        .map((s) => parseInt(s, 10))
+        .filter((id) => !isNaN(id) && id > 0)
+    )];
     const note = typeof req.body.note === 'string' ? req.body.note : undefined;
-    if (isNaN(docId) || docId < 1) {
+    if (docIds.length === 0) {
       res.status(400).send('<span class="text-danger">Invalid document ID.</span>');
       return;
     }
-    try {
-      console.log(`[process-id] document #${docId}`);
-      const result = await broadcaster.capture(() =>
-        processor.processDocument(docId, false, note)
-      );
-      const saved = repo.save(result, false, config.llm.text.model, note);
-      console.log(`[process-id] done → result #${saved.id}, success=${!!result.success}, skipped=${!!result.skipped}`);
-      res.send(views.processIdResult(saved, paperlessUrl));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[process-id] error for #${docId}: ${msg}`);
-      res.status(500).send(`<span class="text-danger"><code>${views.escHtml(msg)}</code></span>`);
+    const rows: string[] = [];
+    for (const docId of docIds) {
+      try {
+        console.log(`[process-id] document #${docId}`);
+        const result = await broadcaster.capture(() =>
+          processor.processDocument(docId, false, note)
+        );
+        const saved = repo.save(result, false, config.llm.text.model, note);
+        console.log(`[process-id] done → result #${saved.id}, success=${!!result.success}, skipped=${!!result.skipped}`);
+        rows.push(views.processIdResult(saved, paperlessUrl));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[process-id] error for #${docId}: ${msg}`);
+        rows.push(`<div><span class="mono">#${docId}</span> <span class="text-danger"><code>${views.escHtml(msg)}</code></span></div>`);
+      }
     }
+    res.send(rows.join('\n'));
   });
 
   // ── Batch process N documents from the queue ─────────────────────────────────
