@@ -240,7 +240,7 @@ export class InvoiceProcessor {
     existingFields: CustomFieldValue[],
     documentTitle: string
   ): CustomFieldValue[] {
-    const fieldMap = new Map<number, string | number | null>();
+    const fieldMap = new Map<number, string | number | boolean | null>();
 
     // Preserve existing field values
     for (const field of existingFields) {
@@ -284,6 +284,9 @@ export class InvoiceProcessor {
       const monetaryValue = `${currency}${Number(extractedData.ustBetrag).toFixed(2)}`;
       fieldMap.set(cf.ustBetrag, monetaryValue);
     }
+    if (cf.vorsteuerIgnorieren !== null && extractedData.vorsteuerIgnorieren !== null) {
+      fieldMap.set(cf.vorsteuerIgnorieren, extractedData.vorsteuerIgnorieren);
+    }
     if (cf.privatanteil !== null && extractedData.privatanteil !== null) {
       fieldMap.set(cf.privatanteil, String(extractedData.privatanteil));
     }
@@ -312,7 +315,7 @@ export class InvoiceProcessor {
     summary: string,
     existingFields: CustomFieldValue[]
   ): CustomFieldValue[] {
-    const fieldMap = new Map<number, string | number | null>();
+    const fieldMap = new Map<number, string | number | boolean | null>();
     for (const field of existingFields) {
       fieldMap.set(field.field, field.value);
     }

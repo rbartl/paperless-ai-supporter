@@ -50,6 +50,7 @@ export interface CustomFieldsConfig {
   ustSatz: string | null;
   nettoBetrag: string | null;
   ustBetrag: string | null;
+  vorsteuerIgnorieren: string | null;
   privatanteil: string | null;
   llmConfidence: string | null;
   originalTitle: string | null;
@@ -67,6 +68,7 @@ export interface ResolvedCustomFields {
   ustSatz: number | null;
   nettoBetrag: number | null;
   ustBetrag: number | null;
+  vorsteuerIgnorieren: number | null;
   privatanteil: number | null;
   llmConfidence: number | null;
   originalTitle: number | null;
@@ -112,7 +114,7 @@ export interface PaperlessDocument {
 
 export interface CustomFieldValue {
   field: number;
-  value: string | number | null;
+  value: string | number | boolean | null;
 }
 
 export interface PaperlessCustomField {
