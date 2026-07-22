@@ -35,6 +35,7 @@ Return a JSON object with exactly these fields:
   "ustSatz": number or null,
   "nettoBetrag": number or null,
   "ustBetrag": number or null,
+  "vorsteuerIgnorieren": true if VAT/Vorsteuer should be ignored, else false,
   "privatanteil": number (0-100) or null,
   "llmConfidence": 0-100 integer,
   "summary": "one sentence summary or null"
@@ -306,6 +307,7 @@ export class LlmClient {
       ustSatz: null,
       nettoBetrag: null,
       ustBetrag: null,
+      vorsteuerIgnorieren: null,
       privatanteil: null,
       llmConfidence: null,
       summary: null,
@@ -530,6 +532,7 @@ Use null if a field is not visible in the image.${criticalNoteSection}`;
         ustSatz: isInvoice ? this.normalizeNumeric(parsed.ustSatz, 'highest') : null,
         nettoBetrag: isInvoice && parsed.nettoBetrag !== undefined ? Number(String(parsed.nettoBetrag).replace(',', '.')) || null : null,
         ustBetrag: isInvoice ? this.normalizeNumeric(parsed.ustBetrag, 'sum') : null,
+        vorsteuerIgnorieren: isInvoice ? parsed.vorsteuerIgnorieren === true : null,
         privatanteil: isInvoice && parsed.privatanteil !== undefined && parsed.privatanteil !== null ? Number(parsed.privatanteil) || null : null,
         llmConfidence: parsed.llmConfidence !== undefined ? Number(parsed.llmConfidence) : null,
         summary: typeof parsed.summary === 'string' ? parsed.summary.substring(0, 150) : null,

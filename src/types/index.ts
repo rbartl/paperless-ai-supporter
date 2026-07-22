@@ -147,6 +147,7 @@ export interface ExtractedInvoiceData {
   ustSatz: number | null;
   nettoBetrag: number | null;
   ustBetrag: number | null;
+  vorsteuerIgnorieren: boolean | null;
   privatanteil: number | null;
   llmConfidence: number | null;
   summary: string | null;
