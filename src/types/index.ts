@@ -55,6 +55,7 @@ export interface CustomFieldsConfig {
   llmConfidence: string | null;
   originalTitle: string | null;
   aisummary: string | null;
+  userComment: string | null;
 }
 
 export interface ResolvedCustomFields {
@@ -73,6 +74,7 @@ export interface ResolvedCustomFields {
   llmConfidence: number | null;
   originalTitle: number | null;
   aisummary: number | null;
+  userComment: number | null;
 }
 
 export interface LlmEndpointConfig {

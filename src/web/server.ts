@@ -1,4 +1,5 @@
 import express, { Response } from 'express';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Config, EnvConfig } from '../types/index.js';
 import { PaperlessClient } from '../clients/paperless.js';
 import { LlmClient } from '../clients/llm.js';
@@ -8,8 +9,17 @@ import * as views from './views.js';
 
 // ── Log broadcaster: intercepts console during processing, streams to SSE clients ──
 
+const fmt = (...args: unknown[]) =>
+  args.map((a) => (a !== null && typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+
 class LogBroadcaster {
   private clients = new Set<Response>();
+  private depth = 0;
+  private origLog: typeof console.log = console.log;
+  private origError: typeof console.error = console.error;
+  // Tracks which document's prefix an in-flight async chain belongs to, so
+  // concurrent captures don't mislabel each other's log lines.
+  private prefixStore = new AsyncLocalStorage<string>();
 
   addClient(res: Response): void {
     this.clients.add(res);
@@ -26,20 +36,39 @@ class LogBroadcaster {
     }
   }
 
-  // Runs fn() with console.log/error intercepted and forwarded to SSE clients.
-  async capture<T>(fn: () => Promise<T>): Promise<T> {
-    const origLog = console.log;
-    const origError = console.error;
-    const fmt = (...args: unknown[]) =>
-      args.map((a) => (a !== null && typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  private withPrefix(line: string): string {
+    const prefix = this.prefixStore.getStore();
+    return prefix ? `[${prefix}] ${line}` : line;
+  }
 
-    console.log = (...args: unknown[]) => { origLog(...args); this.emit(fmt(...args), 'info'); };
-    console.error = (...args: unknown[]) => { origError(...args); this.emit(fmt(...args), 'error'); };
+  // Runs fn() with console.log/error intercepted, prefixed with `prefix`, and
+  // forwarded to SSE clients. Reference-counted so overlapping calls share a
+  // single console patch instead of nesting wrappers (which would echo each
+  // line once per active capture).
+  async capture<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
+    if (this.depth === 0) {
+      this.origLog = console.log;
+      this.origError = console.error;
+      console.log = (...args: unknown[]) => {
+        const line = this.withPrefix(fmt(...args));
+        this.origLog(line);
+        this.emit(line, 'info');
+      };
+      console.error = (...args: unknown[]) => {
+        const line = this.withPrefix(fmt(...args));
+        this.origError(line);
+        this.emit(line, 'error');
+      };
+    }
+    this.depth++;
     try {
-      return await fn();
+      return await this.prefixStore.run(prefix, fn);
     } finally {
-      console.log = origLog;
-      console.error = origError;
+      this.depth--;
+      if (this.depth === 0) {
+        console.log = this.origLog;
+        console.error = this.origError;
+      }
     }
   }
 }
@@ -148,7 +177,7 @@ export async function startWebServer(
     const note = existing.note ?? undefined;
     try {
       console.log(`[retry] document #${existing.document_id} "${existing.document_title}" (result #${existing.id})`);
-      const result = await broadcaster.capture(() =>
+      const result = await broadcaster.capture(`doc ${existing.document_id}`, () =>
         processor.processDocument(existing.document_id, false, note)
       );
       const saved = repo.save(result, false, config.llm.text.model, note);
@@ -178,7 +207,7 @@ export async function startWebServer(
     try {
       const docs = await paperless.getDocumentsByTag(config.paperless.tag);
       console.log(`[queue] ${docs.length} document(s) with tag "${config.paperless.tag}"`);
-      res.send(views.queuePage(docs, config.paperless.tag, paperlessUrl));
+      res.send(views.queuePage(docs, config.paperless.tag, paperlessUrl, resolvedFields.userComment));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[queue] Paperless error: ${msg}`);
@@ -193,7 +222,7 @@ export async function startWebServer(
     const note = typeof req.body.note === 'string' ? req.body.note : undefined;
     try {
       console.log(`[queue] processing document #${docId}`);
-      const result = await broadcaster.capture(() =>
+      const result = await broadcaster.capture(`doc ${docId}`, () =>
         processor.processDocument(docId, false, note)
       );
       const saved = repo.save(result, false, config.llm.text.model, note);
@@ -229,7 +258,7 @@ export async function startWebServer(
     for (const docId of docIds) {
       try {
         console.log(`[process-id] document #${docId}`);
-        const result = await broadcaster.capture(() =>
+        const result = await broadcaster.capture(`doc ${docId}`, () =>
           processor.processDocument(docId, false, note)
         );
         const saved = repo.save(result, false, config.llm.text.model, note);
@@ -255,7 +284,7 @@ export async function startWebServer(
 
       for (const doc of toProcess) {
         console.log(`[batch] → document #${doc.id} "${doc.title}"`);
-        const result = await broadcaster.capture(() =>
+        const result = await broadcaster.capture(`doc ${doc.id}`, () =>
           processor.processDocument(doc.id, false)
         );
         const saved = repo.save(result, false, config.llm.text.model);
@@ -264,7 +293,7 @@ export async function startWebServer(
 
       console.log(`[batch] complete`);
       const remaining = await paperless.getDocumentsByTag(config.paperless.tag);
-      res.send(views.queueDocRows(remaining, config.paperless.tag, paperlessUrl));
+      res.send(views.queueDocRows(remaining, config.paperless.tag, paperlessUrl, resolvedFields.userComment));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[batch] error: ${msg}`);

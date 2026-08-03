@@ -449,7 +449,11 @@ export function detailPage(row: DbProcessingResult, paperlessUrl: string): strin
   return layout(`Result #${row.id}`, body, 'results');
 }
 
-function queueDocRow(doc: PaperlessDocument, paperlessUrl: string): string {
+function queueDocRow(doc: PaperlessDocument, paperlessUrl: string, userCommentFieldId: number | null): string {
+  const storedComment = userCommentFieldId !== null
+    ? doc.custom_fields.find((f) => f.field === userCommentFieldId)?.value
+    : null;
+  const commentValue = typeof storedComment === 'string' ? storedComment : '';
   return `<tr id="queue-row-${doc.id}">
   <td><a href="${paperlessUrl}/documents/${doc.id}/details" target="_blank" class="mono text-decoration-none">#${doc.id}</a></td>
   <td>${escHtml(doc.title)}</td>
@@ -462,24 +466,30 @@ function queueDocRow(doc: PaperlessDocument, paperlessUrl: string): string {
       <textarea name="note" rows="2"
                 class="form-control form-control-sm"
                 style="font-size:0.78rem;resize:vertical;min-height:2.8rem"
-                placeholder="Notes for AI (overrides classification rules)…"></textarea>
+                placeholder="Notes for AI (overrides classification rules)…">${escHtml(commentValue)}</textarea>
       <button type="submit" class="btn btn-accent">${spinIcon}Process</button>
     </form>
   </td>
 </tr>`;
 }
 
-export function queueDocRows(docs: PaperlessDocument[], tagName: string, paperlessUrl: string): string {
+export function queueDocRows(
+  docs: PaperlessDocument[],
+  tagName: string,
+  paperlessUrl: string,
+  userCommentFieldId: number | null
+): string {
   if (!docs.length) {
     return `<tr><td colspan="4" class="text-center text-muted py-4">No documents with tag <code>${escHtml(tagName)}</code> in the queue.</td></tr>`;
   }
-  return docs.map((d) => queueDocRow(d, paperlessUrl)).join('\n');
+  return docs.map((d) => queueDocRow(d, paperlessUrl, userCommentFieldId)).join('\n');
 }
 
 export function queuePage(
   docs: PaperlessDocument[],
   tagName: string,
-  paperlessUrl: string
+  paperlessUrl: string,
+  userCommentFieldId: number | null
 ): string {
   const body = `
 <div class="card mb-3">
@@ -535,7 +545,7 @@ export function queuePage(
           </tr>
         </thead>
         <tbody id="queue-tbody">
-          ${queueDocRows(docs, tagName, paperlessUrl)}
+          ${queueDocRows(docs, tagName, paperlessUrl, userCommentFieldId)}
         </tbody>
       </table>
     </div>

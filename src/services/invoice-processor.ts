@@ -40,8 +40,14 @@ export class InvoiceProcessor {
     try {
       const document = await this.paperless.getDocument(documentId);
       console.log(`\nProcessing document ${documentId}: "${document.title}"`);
-      if (note && note.trim()) {
-        console.log(`  Note: ${note.trim()}`);
+
+      // note: explicit value from the caller always wins (and overwrites the stored
+      // comment below); when absent (e.g. batch processing) fall back to whatever
+      // comment is already persisted on the document, so reprocessing stays deterministic.
+      const storedComment = this.getStoredComment(document.custom_fields);
+      const effectiveNote = note !== undefined ? note : (storedComment ?? undefined);
+      if (effectiveNote && effectiveNote.trim()) {
+        console.log(`  Note: ${effectiveNote.trim()}`);
       }
 
       const content = document.content;
@@ -61,7 +67,7 @@ export class InvoiceProcessor {
         console.log(`  No text content, using vision fallback...`);
         try {
           const preview = await this.paperless.getDocumentPreview(documentId);
-          extractedData = await this.llm.extractWithVision(preview, this.llm.getEmptyExtractionSeed(), 2, note);
+          extractedData = await this.llm.extractWithVision(preview, this.llm.getEmptyExtractionSeed(), 2, effectiveNote);
           console.log(`  → vision(no-text): vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
         } catch (error) {
           console.log(`  Vision (no-text) error: ${error instanceof Error ? error.message : error}`);
@@ -73,7 +79,7 @@ export class InvoiceProcessor {
           };
         }
       } else {
-        extractedData = await this.llm.extractInvoiceData(content, document.title, 3, note);
+        extractedData = await this.llm.extractInvoiceData(content, document.title, 3, effectiveNote);
         console.log(`  → vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'} | conf:${extractedData.llmConfidence ?? '?'}%`);
       }
 
@@ -82,7 +88,7 @@ export class InvoiceProcessor {
         console.log(`  Vision fallback...`);
         try {
           const preview = await this.paperless.getDocumentPreview(documentId);
-          extractedData = await this.llm.extractWithVision(preview, extractedData, 2, note);
+          extractedData = await this.llm.extractWithVision(preview, extractedData, 2, effectiveNote);
           console.log(`  → vision: vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
         } catch (error) {
           console.log(`  Vision error: ${error instanceof Error ? error.message : error}`);
@@ -99,7 +105,7 @@ export class InvoiceProcessor {
         try {
           const preview = await this.paperless.getDocumentPreview(documentId);
           const visionSeed: ExtractedInvoiceData = { ...extractedData, isInvoice: true };
-          extractedData = await this.llm.extractWithVision(preview, visionSeed, 2, note);
+          extractedData = await this.llm.extractWithVision(preview, visionSeed, 2, effectiveNote);
           console.log(`  → vision(low-conf): vendor:${extractedData.vendor || '?'} | nr:${extractedData.invoiceNumber || '?'} | date:${extractedData.invoiceDate || '?'} | total:${extractedData.currency || 'EUR'} ${extractedData.invoiceTotal ?? '?'} | konto:${extractedData.taxAccount || '?'} | category:${extractedData.invoiceCategory || '?'}`);
 
           // If vision filled at least vendor and total, treat as invoice
@@ -116,10 +122,13 @@ export class InvoiceProcessor {
         if (!dryRun) {
           const skipActions: string[] = ['skip:not-invoice'];
           // Set summary even for non-invoice documents
-          if (this.customFields.aisummary !== null && extractedData.summary) {
-            const summaryFields = this.buildSummaryPayload(extractedData.summary, document.custom_fields);
+          const hasSummary = this.customFields.aisummary !== null && !!extractedData.summary;
+          const hasCommentUpdate = this.customFields.userComment !== null && note !== undefined;
+          if (hasSummary || hasCommentUpdate) {
+            const summaryFields = this.buildSummaryPayload(extractedData.summary, document.custom_fields, note);
             await this.paperless.updateDocumentCustomFields(documentId, summaryFields);
-            skipActions.push(`summary="${extractedData.summary}"`);
+            if (hasSummary) skipActions.push(`summary="${extractedData.summary}"`);
+            if (hasCommentUpdate) skipActions.push(`comment updated`);
           }
           if (this.config.paperless.removeTagAfterProcessing) {
             await this.paperless.removeTagFromDocument(documentId, this.config.paperless.tag);
@@ -171,7 +180,7 @@ export class InvoiceProcessor {
         };
       }
 
-      const customFields = this.buildCustomFieldsPayload(extractedData, document.custom_fields, document.title);
+      const customFields = this.buildCustomFieldsPayload(extractedData, document.custom_fields, document.title, note);
       await this.paperless.updateDocumentCustomFields(documentId, customFields);
 
       const actions: string[] = ['fields'];
@@ -235,10 +244,17 @@ export class InvoiceProcessor {
     }
   }
 
+  private getStoredComment(existingFields: CustomFieldValue[]): string | null {
+    if (this.customFields.userComment === null) return null;
+    const entry = existingFields.find((f) => f.field === this.customFields.userComment);
+    return typeof entry?.value === 'string' && entry.value.trim() ? entry.value : null;
+  }
+
   private buildCustomFieldsPayload(
     extractedData: ExtractedInvoiceData,
     existingFields: CustomFieldValue[],
-    documentTitle: string
+    documentTitle: string,
+    explicitNote?: string
   ): CustomFieldValue[] {
     const fieldMap = new Map<number, string | number | boolean | null>();
 
@@ -303,6 +319,12 @@ export class InvoiceProcessor {
     if (cf.aisummary !== null && extractedData.summary !== null) {
       fieldMap.set(cf.aisummary, extractedData.summary);
     }
+    // An explicitly submitted note (even empty, meaning "cleared") overwrites the
+    // stored comment; when no note was submitted the stored value is left untouched.
+    if (cf.userComment !== null && explicitNote !== undefined) {
+      const trimmed = explicitNote.trim();
+      fieldMap.set(cf.userComment, trimmed.length > 0 ? trimmed : null);
+    }
     // bookingDate is left empty for manual entry
 
     return Array.from(fieldMap.entries()).map(([field, value]) => ({
@@ -312,14 +334,21 @@ export class InvoiceProcessor {
   }
 
   private buildSummaryPayload(
-    summary: string,
-    existingFields: CustomFieldValue[]
+    summary: string | null,
+    existingFields: CustomFieldValue[],
+    explicitNote?: string
   ): CustomFieldValue[] {
     const fieldMap = new Map<number, string | number | boolean | null>();
     for (const field of existingFields) {
       fieldMap.set(field.field, field.value);
     }
-    fieldMap.set(this.customFields.aisummary!, summary);
+    if (this.customFields.aisummary !== null && summary) {
+      fieldMap.set(this.customFields.aisummary, summary);
+    }
+    if (this.customFields.userComment !== null && explicitNote !== undefined) {
+      const trimmed = explicitNote.trim();
+      fieldMap.set(this.customFields.userComment, trimmed.length > 0 ? trimmed : null);
+    }
     return Array.from(fieldMap.entries()).map(([field, value]) => ({ field, value }));
   }
 

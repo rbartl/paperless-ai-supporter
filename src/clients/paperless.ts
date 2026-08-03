@@ -31,6 +31,7 @@ export class PaperlessClient {
     this.client = axios.create({
       baseURL: envConfig.paperlessUrl,
       headers,
+      timeout: 30000,
     });
   }
 
@@ -195,6 +196,7 @@ export class PaperlessClient {
       llmConfidence: resolve(config.llmConfidence),
       originalTitle: resolve(config.originalTitle),
       aisummary: resolve(config.aisummary),
+      userComment: resolve(config.userComment),
     };
   }
 
