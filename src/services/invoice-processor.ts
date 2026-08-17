@@ -303,6 +303,9 @@ export class InvoiceProcessor {
     if (cf.vorsteuerIgnorieren !== null && extractedData.vorsteuerIgnorieren !== null) {
       fieldMap.set(cf.vorsteuerIgnorieren, extractedData.vorsteuerIgnorieren);
     }
+    if (cf.vorsteuerNichtAbzugsfaehig !== null && extractedData.vorsteuerNichtAbzugsfaehig !== null) {
+      fieldMap.set(cf.vorsteuerNichtAbzugsfaehig, extractedData.vorsteuerNichtAbzugsfaehig);
+    }
     if (cf.privatanteil !== null && extractedData.privatanteil !== null) {
       fieldMap.set(cf.privatanteil, String(extractedData.privatanteil));
     }

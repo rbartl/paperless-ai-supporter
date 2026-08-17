@@ -192,6 +192,7 @@ export class PaperlessClient {
       nettoBetrag: resolve(config.nettoBetrag),
       ustBetrag: resolve(config.ustBetrag),
       vorsteuerIgnorieren: resolve(config.vorsteuerIgnorieren),
+      vorsteuerNichtAbzugsfaehig: resolve(config.vorsteuerNichtAbzugsfaehig),
       privatanteil: resolve(config.privatanteil),
       llmConfidence: resolve(config.llmConfidence),
       originalTitle: resolve(config.originalTitle),
