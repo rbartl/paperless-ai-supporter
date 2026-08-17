@@ -29,7 +29,7 @@ Live prompt templates (`prompts/*.txt`, e.g. extraction rules/JSON schema) are e
 
 Key paths in edvbartl-ansible: base `kustomize-k8s/bases/paperless-ai-supporter/`, overlay `kustomize-k8s/overlays/prod2024/paperless-ai-supporter/`, ArgoCD app def `kustomize-k8s/overlays/prod2024/argomainapp/apps/paperless-ai-supporter.yaml`, cluster-wide conventions in `edvbartl-ansible/kustomize-k8s/CLAUDE.md`.
 
-Current: tag v0.1.12, image 0.1.12. `PAPERLESS_URL` (internal API client) and `PAPERLESS_PUBLIC_URL` (external, user-facing links, defaults to `PAPERLESS_URL`) are separate env vars — set to `http://paperless.paperless:8080` and `https://pl.edv-bartl.at/`.
+Current: tag v0.1.17, image 0.1.17. `PAPERLESS_URL` (internal API client) and `PAPERLESS_PUBLIC_URL` (external, user-facing links, defaults to `PAPERLESS_URL`) are separate env vars — set to `http://paperless.paperless:8080` and `https://pl.edv-bartl.at/`.
 
 ## Delegating to cursor-agent
 
