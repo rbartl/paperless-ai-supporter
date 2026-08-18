@@ -17,6 +17,13 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
+ARG APP_VERSION=dev
+ARG GIT_COMMIT_SHA
+ARG GIT_COMMIT_DATE
+ENV APP_VERSION=${APP_VERSION}
+ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+ENV GIT_COMMIT_DATE=${GIT_COMMIT_DATE}
+
 # config.yaml is expected to be mounted at /app/config.yaml
 # (or override path via CONFIG_PATH env var)
 VOLUME ["/app/data"]

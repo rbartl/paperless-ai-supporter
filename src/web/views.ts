@@ -1,5 +1,20 @@
 import { DbProcessingResult, ExtractedInvoiceData, PaperlessDocument } from '../types/index.js';
 
+function appFooter(): string {
+  const version = process.env.APP_VERSION || 'dev';
+  const sha = process.env.GIT_COMMIT_SHA;
+  const shortSha = sha ? sha.slice(0, 7) : null;
+  const date = process.env.GIT_COMMIT_DATE
+    ? new Date(process.env.GIT_COMMIT_DATE).toLocaleString('de-AT', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      })
+    : null;
+  const commitInfo = [shortSha, date].filter(Boolean).join(' · ');
+  return `<footer class="app-footer">
+    <span class="mono">${escHtml(version)}</span>${commitInfo ? ` · <span class="mono">${escHtml(commitInfo)}</span>` : ''}
+  </footer>`;
+}
+
 function layout(title: string, body: string, activeNav: 'results' | 'queue' | 'prompts'): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -56,6 +71,7 @@ function layout(title: string, body: string, activeNav: 'results' | 'queue' | 'p
     #log-panel[hidden] { display:none; }
     #log-header { padding:5px 14px; background:#0d1117; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
     #log-lines { overflow-y:auto; padding:6px 14px 10px; font-family:'DM Mono',monospace; font-size:0.76rem; line-height:1.65; flex:1; }
+    .app-footer { text-align:center; color:#9ca3af; font-size:0.75rem; padding:1.5rem 0 1rem; }
   </style>
 </head>
 <body>
@@ -77,6 +93,7 @@ function layout(title: string, body: string, activeNav: 'results' | 'queue' | 'p
 <div class="container-fluid px-4 pb-5">
   ${body}
 </div>
+${appFooter()}
 <div id="log-panel" hidden>
   <div id="log-header">
     <span style="color:#89b4fa;font-family:'DM Mono',monospace;font-size:0.78rem;font-weight:600">● Live Log</span>
