@@ -51,7 +51,7 @@ export interface CustomFieldsConfig {
   nettoBetrag: string | null;
   ustBetrag: string | null;
   vorsteuerIgnorieren: string | null;
-  vorsteuerNichtAbzugsfaehig: string | null;
+  vorsteuerSperre: string | null;
   privatanteil: string | null;
   llmConfidence: string | null;
   originalTitle: string | null;
@@ -71,7 +71,7 @@ export interface ResolvedCustomFields {
   nettoBetrag: number | null;
   ustBetrag: number | null;
   vorsteuerIgnorieren: number | null;
-  vorsteuerNichtAbzugsfaehig: number | null;
+  vorsteuerSperre: number | null;
   privatanteil: number | null;
   llmConfidence: number | null;
   originalTitle: number | null;
@@ -154,7 +154,7 @@ export interface ExtractedInvoiceData {
   nettoBetrag: number | null;
   ustBetrag: number | null;
   vorsteuerIgnorieren: boolean | null;
-  vorsteuerNichtAbzugsfaehig: boolean | null;
+  vorsteuerSperre: boolean | null;
   privatanteil: number | null;
   llmConfidence: number | null;
   summary: string | null;
