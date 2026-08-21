@@ -152,11 +152,13 @@ export class InvoiceProcessor {
         : null;
 
       const categoryTags = this.getCategoryTags(extractedData.invoiceCategory);
+      const categoryTagsToRemove = this.getCategoryTagsToRemove(extractedData.invoiceCategory);
 
       if (dryRun) {
         const dryActions: string[] = ['fields'];
         if (newTitle) dryActions.push(`title="${newTitle}"`);
-        if (categoryTags.length > 0) dryActions.push(`tags=[${categoryTags.join(',')}]`);
+        if (categoryTags.length > 0) dryActions.push(`+tags=[${categoryTags.join(',')}]`);
+        if (categoryTagsToRemove.length > 0) dryActions.push(`-tags=[${categoryTagsToRemove.join(',')}]`);
         if (this.config.paperless.setIssueDate && extractedData.invoiceDate) {
           dryActions.push(`issueDate=${extractedData.invoiceDate}`);
         }
@@ -190,9 +192,10 @@ export class InvoiceProcessor {
         actions.push(`title="${newTitle}"`);
       }
 
-      if (categoryTags.length > 0) {
-        await this.paperless.addTagsToDocument(documentId, categoryTags);
-        actions.push(`tags=[${categoryTags.join(',')}]`);
+      if (categoryTags.length > 0 || categoryTagsToRemove.length > 0) {
+        await this.paperless.syncCategoryTags(documentId, categoryTags, categoryTagsToRemove);
+        if (categoryTags.length > 0) actions.push(`+tags=[${categoryTags.join(',')}]`);
+        if (categoryTagsToRemove.length > 0) actions.push(`-tags=[${categoryTagsToRemove.join(',')}]`);
       }
 
       if (this.config.paperless.setIssueDate && extractedData.invoiceDate) {
@@ -355,12 +358,21 @@ export class InvoiceProcessor {
     return Array.from(fieldMap.entries()).map(([field, value]) => ({ field, value }));
   }
 
+  private getConfiguredCategoryTags(category: 'private' | 'gewerbe'): string[] {
+    const configured = this.config.paperless.categoryTags?.[category];
+    if (configured) return configured;
+    return category === 'private' ? ['privat'] : ['gewerbe', 'ausgabe', 'rechnung'];
+  }
+
   private getCategoryTags(category: 'private' | 'gewerbe' | null): string[] {
-    if (category === 'private') {
-      return ['private'];
-    } else if (category === 'gewerbe') {
-      return ['gewerbe', 'ausgabe', 'rechnung'];
-    }
+    return category ? this.getConfiguredCategoryTags(category) : [];
+  }
+
+  // Reprocessing can flip the category — clear the opposite category's tags so a document
+  // never ends up tagged both "private" and "gewerbe" at once.
+  private getCategoryTagsToRemove(category: 'private' | 'gewerbe' | null): string[] {
+    if (category === 'private') return this.getConfiguredCategoryTags('gewerbe');
+    if (category === 'gewerbe') return this.getConfiguredCategoryTags('private');
     return [];
   }
 

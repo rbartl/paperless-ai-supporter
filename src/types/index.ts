@@ -37,6 +37,11 @@ export interface PaperlessConfig {
   reportPath: string | null;
   invoiceDocumentType: number | null;
   statementDocumentType: number | null;
+  /** Paperless tag names applied per invoiceCategory. Reprocessing removes the other category's tags. */
+  categoryTags?: {
+    private?: string[];
+    gewerbe?: string[];
+  };
 }
 
 export interface CustomFieldsConfig {

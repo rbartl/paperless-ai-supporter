@@ -135,18 +135,22 @@ export class PaperlessClient {
     }
   }
 
-  async addTagsToDocument(documentId: number, tagNames: string[]): Promise<void> {
+  async syncCategoryTags(documentId: number, addTagNames: string[], removeTagNames: string[]): Promise<void> {
+    if (addTagNames.length === 0 && removeTagNames.length === 0) return;
+
     const document = await this.getDocument(documentId);
     const allTags = await this.getTags();
     const currentTags = new Set(document.tags);
+    const findId = (tagName: string) =>
+      allTags.find((t) => t.name.toLowerCase() === tagName.toLowerCase())?.id;
 
-    for (const tagName of tagNames) {
-      const tag = allTags.find(
-        (t) => t.name.toLowerCase() === tagName.toLowerCase()
-      );
-      if (tag) {
-        currentTags.add(tag.id);
-      }
+    for (const tagName of removeTagNames) {
+      const id = findId(tagName);
+      if (id !== undefined) currentTags.delete(id);
+    }
+    for (const tagName of addTagNames) {
+      const id = findId(tagName);
+      if (id !== undefined) currentTags.add(id);
     }
 
     await this.client.patch(`/api/documents/${documentId}/`, {
