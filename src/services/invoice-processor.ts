@@ -122,13 +122,19 @@ export class InvoiceProcessor {
         if (!dryRun) {
           const skipActions: string[] = ['skip:not-invoice'];
           // Set summary even for non-invoice documents
+          const newSkipTitle = this.config.paperless.updateTitle ? extractedData.title : null;
           const hasSummary = this.customFields.aisummary !== null && !!extractedData.summary;
           const hasCommentUpdate = this.customFields.userComment !== null && note !== undefined;
-          if (hasSummary || hasCommentUpdate) {
-            const summaryFields = this.buildSummaryPayload(extractedData.summary, document.custom_fields, note);
+          const hasOriginalTitle = this.customFields.originalTitle !== null && !!newSkipTitle;
+          if (hasSummary || hasCommentUpdate || hasOriginalTitle) {
+            const summaryFields = this.buildSummaryPayload(extractedData.summary, document.custom_fields, note, newSkipTitle ? document.title : undefined);
             await this.paperless.updateDocumentCustomFields(documentId, summaryFields);
             if (hasSummary) skipActions.push(`summary="${extractedData.summary}"`);
             if (hasCommentUpdate) skipActions.push(`comment updated`);
+          }
+          if (newSkipTitle) {
+            await this.paperless.updateDocumentTitle(documentId, newSkipTitle);
+            skipActions.push(`title="${newSkipTitle}"`);
           }
           if (this.config.paperless.removeTagAfterProcessing) {
             await this.paperless.removeTagFromDocument(documentId, this.config.paperless.tag);
@@ -342,11 +348,15 @@ export class InvoiceProcessor {
   private buildSummaryPayload(
     summary: string | null,
     existingFields: CustomFieldValue[],
-    explicitNote?: string
+    explicitNote?: string,
+    originalTitle?: string
   ): CustomFieldValue[] {
     const fieldMap = new Map<number, string | number | boolean | null>();
     for (const field of existingFields) {
       fieldMap.set(field.field, field.value);
+    }
+    if (this.customFields.originalTitle !== null && originalTitle !== undefined && !fieldMap.get(this.customFields.originalTitle)) {
+      fieldMap.set(this.customFields.originalTitle, originalTitle);
     }
     if (this.customFields.aisummary !== null && summary) {
       fieldMap.set(this.customFields.aisummary, summary);

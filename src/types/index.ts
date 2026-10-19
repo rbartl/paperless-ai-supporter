@@ -163,6 +163,8 @@ export interface ExtractedInvoiceData {
   privatanteil: number | null;
   llmConfidence: number | null;
   summary: string | null;
+  /** Short descriptive title, only used for non-invoice documents. */
+  title: string | null;
 }
 
 export interface ProcessingResult {

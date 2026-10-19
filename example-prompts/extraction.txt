@@ -94,6 +94,8 @@ IMPORTANT: The document title may be WRONG (from a previous incorrect classifica
 
 - summary: A very short summary of the document in German (1-2 sentences, max 150 characters). Describe what the document is about. Always provide this, even if isInvoice is false.
 
+- title: A short, descriptive document title in German (max 60 characters), e.g. "Bescheid Übungsfahrten Jessica Bartl" or "Mietvertrag Wohnung Graz". Always provide this, even if isInvoice is false (it is only applied to non-invoice documents; invoice titles come from titleFormat).
+
 - llmConfidence: Your confidence in the extracted data as a percentage (0-100).
   Consider: How clearly readable was the document? How certain are you about vendor, amounts, dates?
   - 90-100: All fields clearly visible and unambiguous
@@ -126,10 +128,11 @@ Respond ONLY with valid JSON. ustSatz and ustBetrag are ALWAYS plain arrays of n
   "nettoBetrag": 102.88,
   "ustBetrag": [20.57],
   "llmConfidence": 85,
-  "summary": "Rechnung von Firma XY für Hosting-Dienste, EUR 120,00"
+  "summary": "Rechnung von Firma XY für Hosting-Dienste, EUR 120,00",
+  "title": "Rechnung Firma XY Hosting"
 }
 
-If isInvoice is false, set all other fields to null EXCEPT summary (always provide a summary).
+If isInvoice is false, set all other fields to null EXCEPT summary and title (always provide both).
 
 Use null for fields that cannot be determined.
 

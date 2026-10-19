@@ -39,7 +39,8 @@ Return a JSON object with exactly these fields:
   "vorsteuerSperre": true if the invoice shows VAT that is legally non-deductible per §12 UStG, else false,
   "privatanteil": number (0-100) or null,
   "llmConfidence": 0-100 integer,
-  "summary": "one sentence summary or null"
+  "summary": "one sentence summary or null",
+  "title": "short descriptive document title (max 60 chars) or null"
 }
 
 Rules:
@@ -47,7 +48,7 @@ Rules:
 - All amounts use dot as decimal separator (e.g. 42.50)
 - invoiceCategory "gewerbe" = business expense, "private" = personal purchase
 - privatanteil: percentage of private (non-business) use. Set to 90 for house/building fees (Hausgebühren, Betriebskosten, Hausverwaltung). Set to 20 for telephone and internet services. Set to null for all other invoices.
-- If isInvoice is false, set all other fields to null
+- If isInvoice is false, set all other fields to null EXCEPT summary and title (always provide both)
 - Return ONLY the JSON object, no markdown, no extra text`,
 
   'vision.txt': `Look at this invoice image and extract the following missing fields:
@@ -313,6 +314,7 @@ export class LlmClient {
       privatanteil: null,
       llmConfidence: null,
       summary: null,
+      title: null,
     };
   }
 
@@ -539,6 +541,7 @@ Use null if a field is not visible in the image.${criticalNoteSection}`;
         privatanteil: isInvoice && parsed.privatanteil !== undefined && parsed.privatanteil !== null ? Number(parsed.privatanteil) || null : null,
         llmConfidence: parsed.llmConfidence !== undefined ? Number(parsed.llmConfidence) : null,
         summary: typeof parsed.summary === 'string' ? parsed.summary.substring(0, 150) : null,
+        title: typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim().substring(0, 100) : null,
       };
 
       return result;
