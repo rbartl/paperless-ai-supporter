@@ -119,6 +119,7 @@ export class InvoiceProcessor {
       }
 
       if (!extractedData.isInvoice) {
+        let titleApplied: string | null = null;
         if (!dryRun) {
           const skipActions: string[] = ['skip:not-invoice'];
           // Set summary even for non-invoice documents
@@ -134,6 +135,7 @@ export class InvoiceProcessor {
           }
           if (newSkipTitle) {
             await this.paperless.updateDocumentTitle(documentId, newSkipTitle);
+            titleApplied = newSkipTitle;
             skipActions.push(`title="${newSkipTitle}"`);
           }
           if (this.config.paperless.removeTagAfterProcessing) {
@@ -147,6 +149,7 @@ export class InvoiceProcessor {
         return {
           documentId,
           title: document.title,
+          newTitle: titleApplied ?? undefined,
           success: true,
           extractedData,
           skipped: true,
