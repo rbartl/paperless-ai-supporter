@@ -215,6 +215,19 @@ export async function startWebServer(
     }
   });
 
+  // Rows only — polled by the queue page so it stays current even if a
+  // long-running process response never reached a sleeping browser.
+  app.get('/queue/rows', async (_req, res) => {
+    try {
+      const docs = await paperless.getDocumentsByTag(config.paperless.tag);
+      res.send(views.queueDocRows(docs, config.paperless.tag, paperlessUrl, resolvedFields.userComment));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[queue] refresh error: ${msg}`);
+      res.status(502).send('');
+    }
+  });
+
   // ── Process a single document from the queue ─────────────────────────────────
 
   app.post('/queue/:docId/process', async (req, res) => {
