@@ -215,17 +215,17 @@ export async function startWebServer(
     }
   });
 
-  // Rows only — polled by the queue page so it stays current even if a
-  // long-running process response never reached a sleeping browser.
-  app.get('/queue/rows', async (_req, res) => {
-    try {
-      const docs = await paperless.getDocumentsByTag(config.paperless.tag);
-      res.send(views.queueDocRows(docs, config.paperless.tag, paperlessUrl, resolvedFields.userComment));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[queue] refresh error: ${msg}`);
-      res.status(502).send('');
-    }
+  // Latest results for the given docs processed after `since` — polled by the
+  // queue page so finished rows turn green even if the original (long-running)
+  // response never reached a sleeping browser.
+  app.get('/queue/results', (req, res) => {
+    const since = String(req.query.since ?? '');
+    const ids = String(req.query.ids ?? '').split(',').map((s) => parseInt(s, 10)).filter((n) => n > 0);
+    const rows = ids
+      .map((id) => repo.findByDocumentId(id)[0])
+      .filter((r) => r && r.processed_at > since)
+      .map((r) => views.queueProcessedRow(r, paperlessUrl));
+    res.send(rows.join('\n'));
   });
 
   // ── Process a single document from the queue ─────────────────────────────────

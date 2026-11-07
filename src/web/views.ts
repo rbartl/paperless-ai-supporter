@@ -497,7 +497,7 @@ export function queueDocRows(
   userCommentFieldId: number | null
 ): string {
   if (!docs.length) {
-    return `<tr id="queue-empty"><td colspan="4" class="text-center text-muted py-4">No documents with tag <code>${escHtml(tagName)}</code> in the queue.</td></tr>`;
+    return `<tr><td colspan="4" class="text-center text-muted py-4">No documents with tag <code>${escHtml(tagName)}</code> in the queue.</td></tr>`;
   }
   return docs.map((d) => queueDocRow(d, paperlessUrl, userCommentFieldId)).join('\n');
 }
@@ -531,7 +531,7 @@ export function queuePage(
 </div>
 <div class="d-flex align-items-center justify-content-between mb-3">
   <div>
-    <h5 class="mb-0">Queue <span id="queue-count" class="text-muted fw-normal" style="font-size:0.9rem">(${docs.length})</span></h5>
+    <h5 class="mb-0">Queue <span class="text-muted fw-normal" style="font-size:0.9rem">(${docs.length})</span></h5>
     <div class="text-muted" style="font-size:0.83rem">Documents with tag <code>${escHtml(tagName)}</code></div>
   </div>
   <div class="d-flex gap-2 align-items-center">
@@ -561,7 +561,7 @@ export function queuePage(
             <th></th>
           </tr>
         </thead>
-        <tbody id="queue-tbody">
+        <tbody id="queue-tbody" data-since="${new Date().toISOString()}">
           ${queueDocRows(docs, tagName, paperlessUrl, userCommentFieldId)}
         </tbody>
       </table>
@@ -570,51 +570,49 @@ export function queuePage(
 </div>
 <script>
 (function() {
-  // Periodically merge the server's queue into the table. Pending rows (with a
-  // form) are kept as-is so typed notes survive; rows that left the queue are
-  // marked processed (keeping their id, so a late htmx response still swaps in);
-  // new documents are appended. Processed result rows are left untouched.
-  if (window.__queueRefresh) return;  // body may be re-swapped by the Refresh button
-  window.__queueRefresh = true;
+  // Rows the user submitted are marked; while any are still pending, poll for
+  // their results so they turn green even if the response got lost (e.g. the
+  // browser was asleep). Nothing else on the page is refreshed.
+  if (window.__queuePoll) return;  // body may be re-swapped by the Refresh button
+  window.__queuePoll = true;
 
-  async function refresh() {
+  document.body.addEventListener('htmx:beforeRequest', function(e) {
+    const form = e.detail.elt;
+    if (!form.closest) return;
+    const row = form.closest('tr[id^="queue-row-"]');
+    if (row) { row.dataset.submitted = '1'; return; }
+    if (form.getAttribute('hx-post') === '/queue/process-batch') {
+      const n = parseInt(form.querySelector('[name=count]').value, 10) || 1;
+      Array.from(document.querySelectorAll('#queue-tbody tr[id^="queue-row-"]'))
+        .filter(function(tr) { return tr.querySelector('form'); })
+        .slice(0, n)
+        .forEach(function(tr) { tr.dataset.submitted = '1'; });
+    }
+  });
+
+  async function poll() {
     const tbody = document.getElementById('queue-tbody');
-    const count = document.getElementById('queue-count');
     if (!tbody || document.hidden) return;
+    const pending = Array.from(tbody.querySelectorAll('tr[data-submitted]'))
+      .filter(function(tr) { return tr.querySelector('form'); });
+    if (!pending.length) return;
+    const ids = pending.map(function(tr) { return tr.id.slice('queue-row-'.length); }).join(',');
     let html;
     try {
-      const res = await fetch('/queue/rows');
+      const res = await fetch('/queue/results?ids=' + ids + '&since=' + encodeURIComponent(tbody.dataset.since));
       if (!res.ok) return;
       html = await res.text();
     } catch (e) { return; }
     const tmp = document.createElement('tbody');
     tmp.innerHTML = html;
-    const fresh = new Map();
-    tmp.querySelectorAll('tr[id^="queue-row-"]').forEach(function(tr) { fresh.set(tr.id, tr); });
-
-    tbody.querySelectorAll('tr[id^="queue-row-"]').forEach(function(tr) {
-      if (!tr.querySelector('form')) return;      // already a result row
-      if (fresh.has(tr.id)) { fresh.delete(tr.id); return; }
-      const docId = tr.id.slice('queue-row-'.length);
-      const done = document.createElement('tr');
-      done.id = tr.id;
-      done.className = 'table-light';
-      done.innerHTML = '<td class="mono">#' + docId + '</td>' +
-        '<td colspan="2" class="text-muted">No longer in queue (processed)</td>' +
-        '<td><a href="/" class="btn btn-outline-secondary btn-outline-sm">Results</a></td>';
-      tr.replaceWith(done);
+    Array.from(tmp.children).forEach(function(tr) {
+      const old = document.getElementById(tr.id);
+      if (old) old.replaceWith(tr);
     });
-
-    fresh.forEach(function(tr) { tbody.appendChild(tr); htmx.process(tr); });
-    const pending = tbody.querySelectorAll('tr[id^="queue-row-"] form').length;
-    const empty = document.getElementById('queue-empty');
-    if (empty) empty.remove();
-    if (!tbody.children.length) tbody.innerHTML = html;  // empty-queue placeholder
-    count.textContent = '(' + pending + ')';
   }
 
-  setInterval(refresh, 30000);
-  document.addEventListener('visibilitychange', function() { if (!document.hidden) refresh(); });
+  setInterval(poll, 15000);
+  document.addEventListener('visibilitychange', function() { if (!document.hidden) poll(); });
 })();
 </script>`;
 
