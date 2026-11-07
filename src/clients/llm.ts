@@ -2,6 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { describeErrors } from './http-errors.js';
 import { ExtractedInvoiceData, LlmConfig } from '../types/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -127,6 +128,8 @@ export class LlmClient {
       },
       timeout: config.vision.timeout,
     });
+    describeErrors(this.textClient, `Text LLM (${config.text.model})`);
+    describeErrors(this.visionClient, `Vision LLM (${config.vision.model})`);
 
     this.systemPrompt = this.loadPromptFile('system.txt');
     this.extractionPrompt = this.loadPromptFile('extraction.txt');

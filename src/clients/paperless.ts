@@ -3,6 +3,7 @@ import { execSync } from 'child_process';
 import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { describeErrors } from './http-errors.js';
 import {
   EnvConfig,
   PaperlessDocument,
@@ -33,6 +34,7 @@ export class PaperlessClient {
       headers,
       timeout: 30000,
     });
+    describeErrors(this.client, 'Paperless');
   }
 
   async getDocumentsByTag(tagName: string): Promise<PaperlessDocument[]> {
@@ -109,9 +111,14 @@ export class PaperlessClient {
     try {
       writeFileSync(tempPdf, pdfBuffer);
       // Convert first page with 200 DPI for good quality
-      execSync(`magick -density 200 "${tempPdf}[0]" -quality 90 "${tempPng}"`, {
-        timeout: 30000,
-      });
+      try {
+        execSync(`magick -density 200 "${tempPdf}[0]" -quality 90 "${tempPng}"`, {
+          timeout: 30000,
+        });
+      } catch (err) {
+        const timedOut = (err as NodeJS.ErrnoException).code === 'ETIMEDOUT';
+        throw new Error(`PDF→PNG conversion (ImageMagick) for document #${id} ${timedOut ? 'took longer than 30s' : `failed: ${err instanceof Error ? err.message : err}`}`);
+      }
       const pngBuffer = readFileSync(tempPng);
       return { buffer: pngBuffer, mimeType: 'image/png' };
     } finally {
