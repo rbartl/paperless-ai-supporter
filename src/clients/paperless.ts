@@ -41,7 +41,7 @@ export class PaperlessClient {
     this.client = axios.create({
       baseURL: envConfig.paperlessUrl,
       headers,
-      timeout: 30000,
+      timeout: 60000,
     });
     describeErrors(this.client, 'Paperless');
   }
