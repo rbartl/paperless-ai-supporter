@@ -78,8 +78,7 @@ fi
 
 if [[ -f "$CLAUDE_MD" ]]; then
   sed -i -E \
-    -e "s#^- Latest tag: v[0-9]+\.[0-9]+\.[0-9]+#- Latest tag: $NEW_TAG#" \
-    -e "s#^- Deployed image: $IMAGE:[0-9]+\.[0-9]+\.[0-9]+#- Deployed image: $IMAGE:$NEW_VERSION#" \
+    -e "s#^Current: tag v[0-9]+\.[0-9]+\.[0-9]+, image [0-9]+\.[0-9]+\.[0-9]+#Current: tag $NEW_TAG, image $NEW_VERSION#" \
     "$CLAUDE_MD"
   echo "✓ updated CLAUDE.md current-state notes"
 fi
