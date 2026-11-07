@@ -36,9 +36,18 @@ class LogBroadcaster {
     }
   }
 
-  private withPrefix(line: string): string {
+  // Only lines logged from inside a capture() chain go to the browser; other
+  // console output that happens meanwhile (e.g. the HTTP request log) stays
+  // server-side.
+  private forward(args: unknown[], orig: typeof console.log, level: 'info' | 'error'): void {
     const prefix = this.prefixStore.getStore();
-    return prefix ? `[${prefix}] ${line}` : line;
+    if (prefix === undefined) {
+      orig(...args);
+      return;
+    }
+    const line = `[${prefix}] ${fmt(...args)}`;
+    orig(line);
+    this.emit(line, level);
   }
 
   // Runs fn() with console.log/error intercepted, prefixed with `prefix`, and
@@ -49,16 +58,8 @@ class LogBroadcaster {
     if (this.depth === 0) {
       this.origLog = console.log;
       this.origError = console.error;
-      console.log = (...args: unknown[]) => {
-        const line = this.withPrefix(fmt(...args));
-        this.origLog(line);
-        this.emit(line, 'info');
-      };
-      console.error = (...args: unknown[]) => {
-        const line = this.withPrefix(fmt(...args));
-        this.origError(line);
-        this.emit(line, 'error');
-      };
+      console.log = (...args: unknown[]) => this.forward(args, this.origLog, 'info');
+      console.error = (...args: unknown[]) => this.forward(args, this.origError, 'error');
     }
     this.depth++;
     try {
