@@ -15,6 +15,15 @@ import {
   ResolvedCustomFields,
 } from '../types/index.js';
 
+export interface DocumentPatch {
+  custom_fields?: CustomFieldValue[];
+  title?: string;
+  tags?: number[];
+  created?: string;
+  archive_serial_number?: number;
+  document_type?: number;
+}
+
 export class PaperlessClient {
   private client: AxiosInstance;
 
@@ -37,16 +46,25 @@ export class PaperlessClient {
     describeErrors(this.client, 'Paperless');
   }
 
-  async getDocumentsByTag(tagName: string): Promise<PaperlessDocument[]> {
-    const response = await this.client.get<PaperlessListResponse<PaperlessDocument>>(
-      '/api/documents/',
-      {
-        params: {
-          tags__name__iexact: tagName,
-        },
+  /** Fetch every page of a list endpoint (Paperless pages by 25 by default). */
+  private async getAll<T>(url: string, params: Record<string, unknown> = {}): Promise<T[]> {
+    const results: T[] = [];
+    for (let page = 1; ; page++) {
+      const response = await this.client.get<PaperlessListResponse<T>>(url, {
+        params: { ...params, page, page_size: 100 },
+      });
+      if (!Array.isArray(response.data?.results)) {
+        throw new Error(
+          `Unexpected response from GET ${url} — expected {results:[...]}, got: ${JSON.stringify(response.data)?.slice(0, 200)}`
+        );
       }
-    );
-    return response.data.results;
+      results.push(...response.data.results);
+      if (!response.data.next) return results;
+    }
+  }
+
+  async getDocumentsByTag(tagName: string): Promise<PaperlessDocument[]> {
+    return this.getAll<PaperlessDocument>('/api/documents/', { tags__name__iexact: tagName });
   }
 
   async getDocument(id: number): Promise<PaperlessDocument> {
@@ -59,42 +77,14 @@ export class PaperlessClient {
     return document.content || '';
   }
 
-  async updateDocumentCustomFields(
-    id: number,
-    customFields: CustomFieldValue[]
-  ): Promise<void> {
-    await this.client.patch(`/api/documents/${id}/`, {
-      custom_fields: customFields,
-    });
+  /** Apply all changes in one PATCH — each PATCH is a full (expensive) document save in Paperless. */
+  async updateDocument(id: number, patch: DocumentPatch): Promise<void> {
+    await this.client.patch(`/api/documents/${id}/`, patch);
   }
 
   async getNextArchiveSerialNumber(): Promise<number> {
     const response = await this.client.get<number>('/api/documents/next_asn/');
     return response.data;
-  }
-
-  async setArchiveSerialNumber(id: number, asn: number): Promise<void> {
-    await this.client.patch(`/api/documents/${id}/`, {
-      archive_serial_number: asn,
-    });
-  }
-
-  async updateDocumentCreatedDate(id: number, date: string): Promise<void> {
-    await this.client.patch(`/api/documents/${id}/`, {
-      created: date,
-    });
-  }
-
-  async updateDocumentTitle(id: number, title: string): Promise<void> {
-    await this.client.patch(`/api/documents/${id}/`, {
-      title,
-    });
-  }
-
-  async setDocumentType(id: number, documentTypeId: number): Promise<void> {
-    await this.client.patch(`/api/documents/${id}/`, {
-      document_type: documentTypeId,
-    });
   }
 
   async getDocumentPreview(id: number): Promise<{ buffer: Buffer; mimeType: string }> {
@@ -127,54 +117,8 @@ export class PaperlessClient {
     }
   }
 
-  async removeTagFromDocument(documentId: number, tagName: string): Promise<void> {
-    const document = await this.getDocument(documentId);
-    const tags = await this.getTags();
-    const tagToRemove = tags.find(
-      (t) => t.name.toLowerCase() === tagName.toLowerCase()
-    );
-
-    if (tagToRemove) {
-      const updatedTags = document.tags.filter((t) => t !== tagToRemove.id);
-      await this.client.patch(`/api/documents/${documentId}/`, {
-        tags: updatedTags,
-      });
-    }
-  }
-
-  async syncCategoryTags(documentId: number, addTagNames: string[], removeTagNames: string[]): Promise<void> {
-    if (addTagNames.length === 0 && removeTagNames.length === 0) return;
-
-    const document = await this.getDocument(documentId);
-    const allTags = await this.getTags();
-    const currentTags = new Set(document.tags);
-    const findId = (tagName: string) =>
-      allTags.find((t) => t.name.toLowerCase() === tagName.toLowerCase())?.id;
-
-    for (const tagName of removeTagNames) {
-      const id = findId(tagName);
-      if (id !== undefined) currentTags.delete(id);
-    }
-    for (const tagName of addTagNames) {
-      const id = findId(tagName);
-      if (id !== undefined) currentTags.add(id);
-    }
-
-    await this.client.patch(`/api/documents/${documentId}/`, {
-      tags: Array.from(currentTags),
-    });
-  }
-
   async getCustomFields(): Promise<PaperlessCustomField[]> {
-    const response = await this.client.get<PaperlessListResponse<PaperlessCustomField>>(
-      '/api/custom_fields/'
-    );
-    if (!Array.isArray(response.data?.results)) {
-      throw new Error(
-        `Unexpected response from GET /api/custom_fields/ — expected {results:[...]}, got: ${JSON.stringify(response.data)?.slice(0, 200)}`
-      );
-    }
-    return response.data.results;
+    return this.getAll<PaperlessCustomField>('/api/custom_fields/');
   }
 
   async resolveCustomFields(config: CustomFieldsConfig): Promise<ResolvedCustomFields> {
@@ -213,9 +157,6 @@ export class PaperlessClient {
   }
 
   async getTags(): Promise<PaperlessTag[]> {
-    const response = await this.client.get<PaperlessListResponse<PaperlessTag>>(
-      '/api/tags/'
-    );
-    return response.data.results;
+    return this.getAll<PaperlessTag>('/api/tags/');
   }
 }

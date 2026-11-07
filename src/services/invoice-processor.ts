@@ -1,4 +1,4 @@
-import { PaperlessClient } from '../clients/paperless.js';
+import { DocumentPatch, PaperlessClient } from '../clients/paperless.js';
 import { LlmClient } from '../clients/llm.js';
 import { appendFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -19,6 +19,22 @@ export class InvoiceProcessor {
     private config: Config,
     private customFields: ResolvedCustomFields
   ) {}
+
+  /** New tag id list for a document: add/remove tags by name (unknown names are ignored). */
+  private async computeTags(currentTagIds: number[], addNames: string[], removeNames: string[]): Promise<number[]> {
+    const allTags = await this.paperless.getTags();
+    const findId = (name: string) => allTags.find((t) => t.name.toLowerCase() === name.toLowerCase())?.id;
+    const tags = new Set(currentTagIds);
+    for (const name of removeNames) {
+      const id = findId(name);
+      if (id !== undefined) tags.delete(id);
+    }
+    for (const name of addNames) {
+      const id = findId(name);
+      if (id !== undefined) tags.add(id);
+    }
+    return Array.from(tags);
+  }
 
   async processAllTaggedDocuments(dryRun = false, limit?: number): Promise<ProcessingResult[]> {
     const allDocuments = await this.paperless.getDocumentsByTag(this.config.paperless.tag);
@@ -127,21 +143,24 @@ export class InvoiceProcessor {
           const hasSummary = this.customFields.aisummary !== null && !!extractedData.summary;
           const hasCommentUpdate = this.customFields.userComment !== null && note !== undefined;
           const hasOriginalTitle = this.customFields.originalTitle !== null && !!newSkipTitle;
+          const patch: DocumentPatch = {};
           if (hasSummary || hasCommentUpdate || hasOriginalTitle) {
-            const summaryFields = this.buildSummaryPayload(extractedData.summary, document.custom_fields, note, newSkipTitle ? document.title : undefined);
-            await this.paperless.updateDocumentCustomFields(documentId, summaryFields);
+            patch.custom_fields = this.buildSummaryPayload(extractedData.summary, document.custom_fields, note, newSkipTitle ? document.title : undefined);
             if (hasSummary) skipActions.push(`summary="${extractedData.summary}"`);
             if (hasCommentUpdate) skipActions.push(`comment updated`);
           }
           if (newSkipTitle) {
-            await this.paperless.updateDocumentTitle(documentId, newSkipTitle);
-            titleApplied = newSkipTitle;
+            patch.title = newSkipTitle;
             skipActions.push(`title="${newSkipTitle}"`);
           }
           if (this.config.paperless.removeTagAfterProcessing) {
-            await this.paperless.removeTagFromDocument(documentId, this.config.paperless.tag);
+            patch.tags = await this.computeTags(document.tags, [], [this.config.paperless.tag]);
             skipActions.push(`-tag:${this.config.paperless.tag}`);
           }
+          if (Object.keys(patch).length > 0) {
+            await this.paperless.updateDocument(documentId, patch);
+          }
+          titleApplied = newSkipTitle;
           console.log(`  ${skipActions.join(', ')}`);
         } else {
           console.log(`  skip:not-invoice`);
@@ -191,31 +210,33 @@ export class InvoiceProcessor {
         };
       }
 
-      const customFields = this.buildCustomFieldsPayload(extractedData, document.custom_fields, document.title, note);
-      await this.paperless.updateDocumentCustomFields(documentId, customFields);
-
+      const patch: DocumentPatch = {
+        custom_fields: this.buildCustomFieldsPayload(extractedData, document.custom_fields, document.title, note),
+      };
       const actions: string[] = ['fields'];
 
       if (newTitle) {
-        await this.paperless.updateDocumentTitle(documentId, newTitle);
+        patch.title = newTitle;
         actions.push(`title="${newTitle}"`);
       }
 
-      if (categoryTags.length > 0 || categoryTagsToRemove.length > 0) {
-        await this.paperless.syncCategoryTags(documentId, categoryTags, categoryTagsToRemove);
+      const tagsToRemove = [...categoryTagsToRemove];
+      if (this.config.paperless.removeTagAfterProcessing) tagsToRemove.push(this.config.paperless.tag);
+      if (categoryTags.length > 0 || tagsToRemove.length > 0) {
+        patch.tags = await this.computeTags(document.tags, categoryTags, tagsToRemove);
         if (categoryTags.length > 0) actions.push(`+tags=[${categoryTags.join(',')}]`);
         if (categoryTagsToRemove.length > 0) actions.push(`-tags=[${categoryTagsToRemove.join(',')}]`);
+        if (this.config.paperless.removeTagAfterProcessing) actions.push(`-tag:${this.config.paperless.tag}`);
       }
 
       if (this.config.paperless.setIssueDate && extractedData.invoiceDate) {
-        await this.paperless.updateDocumentCreatedDate(documentId, extractedData.invoiceDate);
+        patch.created = extractedData.invoiceDate;
         actions.push(`issueDate=${extractedData.invoiceDate}`);
       }
 
       if (this.config.paperless.setArchiveSerialNumber && document.archive_serial_number === null) {
-        const nextAsn = await this.paperless.getNextArchiveSerialNumber();
-        await this.paperless.setArchiveSerialNumber(documentId, nextAsn);
-        actions.push(`ASN=${nextAsn}`);
+        patch.archive_serial_number = await this.paperless.getNextArchiveSerialNumber();
+        actions.push(`ASN=${patch.archive_serial_number}`);
       }
 
       // Set document type based on taxAccount
@@ -224,15 +245,11 @@ export class InvoiceProcessor {
         ? this.config.paperless.statementDocumentType
         : this.config.paperless.invoiceDocumentType;
       if (documentTypeId !== null) {
-        await this.paperless.setDocumentType(documentId, documentTypeId);
+        patch.document_type = documentTypeId;
         actions.push(`type=${isStatement ? 'Kontoauszug' : 'Rechnung'}`);
       }
 
-      if (this.config.paperless.removeTagAfterProcessing) {
-        await this.paperless.removeTagFromDocument(documentId, this.config.paperless.tag);
-        actions.push(`-tag:${this.config.paperless.tag}`);
-      }
-
+      await this.paperless.updateDocument(documentId, patch);
       console.log(`  Updated: ${actions.join(', ')}`);
 
       return {
